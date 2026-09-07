@@ -1,0 +1,23 @@
+# Déploiement Render.com — "New +" → "Blueprint" → pointe sur ce dépôt.
+services:
+  - type: web
+    name: classmemo
+    runtime: node
+    plan: starter # un disque persistant nécessite un plan payant
+    region: frankfurt
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATA_DIR
+        value: /data
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ANTHROPIC_API_KEY
+        sync: false
+    disk:
+      name: classmemo-data
+      mountPath: /data
+      sizeGB: 1

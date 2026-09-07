@@ -1,0 +1,8 @@
+node_modules
+**/node_modules
+web/dist
+server/classmemo.db*
+server/uploads/*
+!server/uploads/.gitkeep
+.git
+*.log

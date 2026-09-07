@@ -1,0 +1,252 @@
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../auth.jsx';
+import { get, post, upload } from '../api.js';
+import { recognize } from '../lib/ocr.js';
+import { BackBar, Btn, Card, Icon, ScreenLoader, SubjectChip, useToast } from '../components/ui.jsx';
+import { formatDate } from '../lib/format.js';
+
+let localSeq = 0;
+
+export default function AddNotes() {
+  const { group } = useAuth();
+  const navigate = useNavigate();
+  const toast = useToast();
+  const fileRef = useRef(null);
+
+  const [subjects, setSubjects] = useState(null);
+  const [subjectId, setSubjectId] = useState(null);
+  const today = new Date().toISOString().slice(0, 10);
+  const [date, setDate] = useState(today);
+  const [location, setLocation] = useState('');
+  const [title, setTitle] = useState('');
+  const [note, setNote] = useState('');
+  const [addNote, setAddNote] = useState(true);
+  const [pages, setPages] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    get(`/groups/${group.id}/subjects`).then((s) => {
+      setSubjects(s);
+      setSubjectId(s[0]?.id || null);
+    });
+  }, [group.id]);
+
+  if (!subjects) return <ScreenLoader />;
+  const subject = subjects.find((s) => s.id === subjectId);
+
+  function onFiles(e) {
+    const files = [...(e.target.files || [])];
+    e.target.value = '';
+    for (const file of files) {
+      const localId = `p${++localSeq}`;
+      const previewUrl = URL.createObjectURL(file);
+      setPages((p) => [
+        ...p,
+        { localId, file, previewUrl, ocrText: '', progress: 0, status: 'ocr', label: `Page ${p.length + 1}` },
+      ]);
+      recognize(file, (progress) =>
+        setPages((p) => p.map((x) => (x.localId === localId ? { ...x, progress } : x))),
+      ).then((text) =>
+        setPages((p) =>
+          p.map((x) => (x.localId === localId ? { ...x, ocrText: text, status: text ? 'done' : 'empty' } : x)),
+        ),
+      );
+    }
+  }
+
+  const setPage = (localId, patch) =>
+    setPages((p) => p.map((x) => (x.localId === localId ? { ...x, ...patch } : x)));
+  const removePage = (localId) => setPages((p) => p.filter((x) => x.localId !== localId));
+
+  const canSubmit =
+    subjectId && pages.length > 0 && pages.every((p) => p.status !== 'ocr') && !submitting;
+
+  async function submit() {
+    setSubmitting(true);
+    try {
+      const course = await post('/courses', {
+        groupId: group.id,
+        subjectId,
+        title: title.trim() || `${subject?.name || 'Cours'} — ${formatDate(date)}`,
+        date,
+        sessionLabel: 'Notes manuscrites',
+        location: location.trim() || null,
+      });
+      for (const p of pages) {
+        const fd = new FormData();
+        fd.append('image', p.file, p.file.name);
+        fd.append('label', p.label);
+        fd.append('ocrText', p.ocrText || '');
+        fd.append('quality', p.status === 'done' ? 'Net' : 'À vérifier');
+        await upload(`/courses/${course.id}/pages`, fd);
+      }
+      await post(`/courses/${course.id}/analyze`, { note: addNote ? note.trim() || null : null });
+      navigate(`/courses/${course.id}/analyzing`, { replace: true });
+    } catch (err) {
+      toast(err.message, 'error');
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-space-md py-space-sm">
+      <BackBar label="Retour" to="/" right={<span className="text-caption font-semibold bg-surface-container-high px-2 py-1 rounded-full">Préparation</span>} />
+
+      <header>
+        <h1 className="text-headline-lg-mobile font-bold text-primary">Déposer des notes</h1>
+        <p className="text-body-sm text-on-surface-variant">Partage tes croquis et synthèses avec {group.name}.</p>
+      </header>
+
+      <div className="bg-surface-container-low rounded-2xl p-space-md flex items-start gap-space-sm">
+        <span className="w-11 h-11 rounded-full bg-secondary-fixed text-secondary flex items-center justify-center flex-shrink-0">
+          <Icon name="edit_note" size={22} />
+        </span>
+        <div>
+          <p className="text-label-md font-bold text-on-surface flex items-center gap-2">
+            C'est ton tour aujourd'hui <span className="text-caption font-semibold bg-primary-fixed text-primary px-2 py-0.5 rounded-full">Scribe</span>
+          </p>
+          <p className="text-body-sm text-on-surface-variant mt-0.5">
+            L'équipe relira et annotera la fiche dès sa génération pour valider les notions clés.
+          </p>
+        </div>
+      </div>
+
+      <Field label="Matière du cours">
+        <div className="flex gap-2 flex-wrap">
+          {subjects.map((s) => (
+            <button
+              key={s.id}
+              onClick={() => setSubjectId(s.id)}
+              className={`transition-all ${subjectId === s.id ? '' : 'opacity-55'}`}
+            >
+              <SubjectChip colorKey={s.colorKey} label={s.name} />
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <div className="grid grid-cols-2 gap-space-sm">
+        <Field label="Date de la séance">
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="h-12 px-3 rounded-xl bg-surface-container-lowest ring-1 ring-black/[0.08] outline-none focus:ring-2 focus:ring-primary text-body-md w-full"
+          />
+        </Field>
+        <Field label="Lieu (facultatif)">
+          <input
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            placeholder="Amphi B…"
+            className="h-12 px-3 rounded-xl bg-surface-container-lowest ring-1 ring-black/[0.08] outline-none focus:ring-2 focus:ring-primary text-body-md w-full"
+          />
+        </Field>
+      </div>
+
+      <Field label="Titre du cours (facultatif)">
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder={`${subject?.name || 'Cours'} — ${formatDate(date)}`}
+          className="h-12 px-3 rounded-xl bg-surface-container-lowest ring-1 ring-black/[0.08] outline-none focus:ring-2 focus:ring-primary text-body-md w-full"
+        />
+      </Field>
+
+      <Field label="Photos des notes manuscrites" hint={pages.length ? `${pages.length} page·s` : 'OCR local (français)'}>
+        <div className="bg-surface-container-low rounded-2xl p-space-md flex flex-col items-center text-center gap-2">
+          <span className="w-12 h-12 rounded-full bg-surface-container-highest text-primary flex items-center justify-center">
+            <Icon name="document_scanner" size={24} />
+          </span>
+          <p className="text-label-md font-semibold text-on-surface">Ajoute tes feuillets de cours</p>
+          <p className="text-caption text-on-surface-variant max-w-[16rem]">
+            Prends une vue bien à plat. L'OCR de ClassMemo transcrit le texte automatiquement dans ton navigateur.
+          </p>
+          <div className="flex gap-2 mt-1">
+            <Btn icon="photo_camera" onClick={() => fileRef.current?.click()}>Prendre / choisir</Btn>
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" capture="environment" multiple hidden onChange={onFiles} />
+        </div>
+      </Field>
+
+      {pages.length > 0 && (
+        <div className="flex flex-col gap-space-sm">
+          {pages.map((p, i) => (
+            <Card key={p.localId} className="p-space-sm">
+              <div className="flex gap-3">
+                <img src={p.previewUrl} alt="" className="w-20 h-20 rounded-xl object-cover bg-surface-container flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <input
+                      value={p.label}
+                      onChange={(e) => setPage(p.localId, { label: e.target.value })}
+                      className="text-label-md font-semibold bg-transparent outline-none w-32"
+                    />
+                    <button onClick={() => removePage(p.localId)} className="text-error">
+                      <Icon name="close" size={18} />
+                    </button>
+                  </div>
+                  <p className="text-caption text-on-surface-variant mt-0.5">
+                    {p.status === 'ocr'
+                      ? `Transcription… ${Math.round((p.progress || 0) * 100)}%`
+                      : p.status === 'empty'
+                        ? 'Aucun texte détecté — saisis-le à la main'
+                        : 'Texte transcrit ✓'}
+                  </p>
+                  {p.status === 'ocr' && (
+                    <div className="h-1 bg-surface-container rounded-full mt-1 overflow-hidden">
+                      <div className="h-full bg-primary transition-all" style={{ width: `${(p.progress || 0) * 100}%` }} />
+                    </div>
+                  )}
+                </div>
+              </div>
+              <textarea
+                value={p.ocrText}
+                onChange={(e) => setPage(p.localId, { ocrText: e.target.value })}
+                rows={4}
+                placeholder="Transcription de la page…"
+                className="w-full mt-2 p-2 rounded-xl bg-surface-container-low text-body-sm outline-none focus:ring-2 focus:ring-primary resize-y"
+              />
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Card className="p-space-md">
+        <label className="flex items-center gap-2 text-label-md font-semibold">
+          <input type="checkbox" checked={addNote} onChange={(e) => setAddNote(e.target.checked)} className="w-4 h-4 accent-primary" />
+          Ajouter un mot pour le groupe
+        </label>
+        {addNote && (
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={3}
+            placeholder="Précise un point clé ou une question pour l'équipe…"
+            className="w-full mt-2 p-2 rounded-xl bg-surface-container-low text-body-sm outline-none focus:ring-2 focus:ring-primary resize-y"
+          />
+        )}
+      </Card>
+
+      <Btn onClick={submit} disabled={!canSubmit} iconRight="arrow_forward" className="w-full">
+        {submitting ? 'Envoi…' : "Lancer l'analyse intelligente"}
+      </Btn>
+      <p className="text-caption text-on-surface-variant flex items-center gap-1 justify-center">
+        <Icon name="bolt" size={13} /> Génération automatique : résumé, flashcards & quiz interactif
+      </p>
+    </div>
+  );
+}
+
+function Field({ label, hint, children }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between">
+        <span className="text-label-md font-semibold text-on-surface">{label}</span>
+        {hint && <span className="text-caption text-on-surface-variant">{hint}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}

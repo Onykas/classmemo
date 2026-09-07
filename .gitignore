@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.log
+
+# server data
+server/classmemo.db
+server/classmemo.db-shm
+server/classmemo.db-wal
+server/uploads/*
+!server/uploads/.gitkeep
+server/.env
