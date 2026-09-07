@@ -9,3 +9,5 @@ server/classmemo.db-wal
 server/uploads/*
 !server/uploads/.gitkeep
 server/.env
+
+server/pgdata/

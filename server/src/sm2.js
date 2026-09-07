@@ -7,7 +7,7 @@ export const GRADE_QUALITY = { again: 2, hard: 3, good: 5 };
 
 export function sm2(prev, quality) {
   let ease = prev?.ease ?? 2.5;
-  let interval = prev?.interval ?? 0;
+  let interval = prev?.interval_days ?? prev?.interval ?? 0;
   let reps = prev?.reps ?? 0;
 
   if (quality < 3) {

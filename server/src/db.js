@@ -1,70 +1,123 @@
-import { DatabaseSync } from 'node:sqlite';
-import { DB_PATH } from './env.js';
-
 /*
- * Fine wrapper autour de node:sqlite (intégré à Node ≥ 22) pour offrir une API
- * proche de better-sqlite3 : db.prepare(sql).get/all/run, db.exec, db.transaction.
- * Évite toute dépendance native à compiler.
+ * Couche base de données PostgreSQL.
+ *  - En prod : variable DATABASE_URL -> pool `pg` (Neon, Render, etc.).
+ *  - En local : pas de DATABASE_URL -> PGlite (PostgreSQL en WASM, fichier local),
+ *    zéro installation.
+ * API async unifiée : db.get / db.all / db.run / db.exec / db.tx.
+ * On garde une syntaxe proche de l'ancien code : placeholders `?` (positionnels)
+ * et `@nom` (nommés), réécrits en `$n` pour Postgres.
  */
+import path from 'node:path';
+import { DATABASE_URL, ROOT } from './env.js';
 
-const raw = new DatabaseSync(DB_PATH);
-raw.exec('PRAGMA journal_mode = WAL');
-raw.exec('PRAGMA foreign_keys = ON');
+const isPlainObject = (v) =>
+  v != null &&
+  typeof v === 'object' &&
+  !Array.isArray(v) &&
+  !(v instanceof Date) &&
+  !(typeof Buffer !== 'undefined' && Buffer.isBuffer(v));
 
-function isPlainObject(v) {
-  return (
-    v != null &&
-    typeof v === 'object' &&
-    !Array.isArray(v) &&
-    !(v instanceof Uint8Array) &&
-    !(typeof Buffer !== 'undefined' && Buffer.isBuffer(v)) &&
-    !(v instanceof Date)
-  );
-}
-
-// node:sqlite attend l'objet de paramètres nommés en PREMIER, puis les
-// paramètres positionnels. better-sqlite3 fait l'inverse -> on normalise.
-function normalize(args) {
+// Réécrit `?` et `@nom` en `$1, $2, …` et construit le tableau de valeurs.
+function build(sql, args) {
+  let named = null;
+  let positional = args;
   if (args.length && isPlainObject(args[args.length - 1])) {
-    return [args[args.length - 1], ...args.slice(0, -1)];
+    named = args[args.length - 1];
+    positional = args.slice(0, -1);
   }
-  return args;
+  const values = [];
+  const nameIdx = new Map();
+
+  let text = sql.replace(/@([a-zA-Z_][a-zA-Z0-9_]*)/g, (m, name) => {
+    if (!named || !(name in named)) return m;
+    if (!nameIdx.has(name)) {
+      values.push(named[name]);
+      nameIdx.set(name, values.length);
+    }
+    return '$' + nameIdx.get(name);
+  });
+
+  let p = 0;
+  text = text.replace(/\?/g, () => {
+    values.push(positional[p++]);
+    return '$' + values.length;
+  });
+
+  return { text, values };
 }
 
-function prepare(sql) {
-  const st = raw.prepare(sql);
-  try {
-    st.setAllowBareNamedParameters(true);
-  } catch {
-    /* version plus ancienne : ignore */
-  }
-  return {
-    get: (...a) => st.get(...normalize(a)),
-    all: (...a) => st.all(...normalize(a)),
-    run: (...a) => st.run(...normalize(a)),
+// --- Choix du driver ---
+
+let driver;
+
+if (DATABASE_URL) {
+  const { default: pg } = await import('pg');
+  const pool = new pg.Pool({
+    connectionString: DATABASE_URL,
+    ssl: /sslmode=disable/.test(DATABASE_URL) ? false : { rejectUnauthorized: false },
+    max: 8,
+  });
+  driver = {
+    query: (text, values) => pool.query(text, values),
+    exec: (sql) => pool.query(sql),
+    async tx(fn) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const r = await fn((sql, ...a) => {
+          const { text, values } = build(sql, a);
+          return client.query(text, values);
+        });
+        await client.query('COMMIT');
+        return r;
+      } catch (e) {
+        try {
+          await client.query('ROLLBACK');
+        } catch {
+          /* rien */
+        }
+        throw e;
+      } finally {
+        client.release();
+      }
+    },
+  };
+} else {
+  const { PGlite } = await import('@electric-sql/pglite');
+  const dir = process.env.PGLITE_DIR || path.join(ROOT, 'pgdata');
+  const lite = new PGlite(dir);
+  await lite.waitReady;
+  driver = {
+    query: (text, values) => lite.query(text, values),
+    exec: (sql) => lite.exec(sql),
+    async tx(fn) {
+      return lite.transaction(async (t) =>
+        fn((sql, ...a) => {
+          const { text, values } = build(sql, a);
+          return t.query(text, values);
+        }),
+      );
+    },
   };
 }
 
 export const db = {
-  prepare,
-  exec: (sql) => raw.exec(sql),
-  transaction(fn) {
-    return (...args) => {
-      raw.exec('BEGIN');
-      try {
-        const result = fn(...args);
-        raw.exec('COMMIT');
-        return result;
-      } catch (err) {
-        try {
-          raw.exec('ROLLBACK');
-        } catch {
-          /* rien */
-        }
-        throw err;
-      }
-    };
+  async get(sql, ...args) {
+    const { text, values } = build(sql, args);
+    const { rows } = await driver.query(text, values);
+    return rows[0] ?? null;
   },
+  async all(sql, ...args) {
+    const { text, values } = build(sql, args);
+    const { rows } = await driver.query(text, values);
+    return rows;
+  },
+  async run(sql, ...args) {
+    const { text, values } = build(sql, args);
+    return driver.query(text, values);
+  },
+  exec: (sql) => driver.exec(sql),
+  tx: (fn) => driver.tx(fn),
 };
 
 export const SCHEMA = `
@@ -80,7 +133,7 @@ CREATE TABLE IF NOT EXISTS users (
   reminder_freq TEXT DEFAULT '2/jour',
   evening_reminder INTEGER DEFAULT 1,
   sr_enabled INTEGER DEFAULT 1,
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS groups (
@@ -90,7 +143,7 @@ CREATE TABLE IF NOT EXISTS groups (
   subject_label TEXT,
   max_members INTEGER DEFAULT 4,
   created_by TEXT,
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS group_members (
@@ -99,8 +152,8 @@ CREATE TABLE IF NOT EXISTS group_members (
   role TEXT DEFAULT 'membre',
   presence TEXT DEFAULT 'offline',
   activity TEXT,
-  last_seen TEXT,
-  joined_at TEXT DEFAULT (datetime('now')),
+  last_seen TIMESTAMPTZ,
+  joined_at TIMESTAMPTZ DEFAULT now(),
   PRIMARY KEY (group_id, user_id)
 );
 
@@ -112,7 +165,7 @@ CREATE TABLE IF NOT EXISTS subjects (
   description TEXT,
   modules_count INTEGER DEFAULT 0,
   semester TEXT,
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS courses (
@@ -134,8 +187,8 @@ CREATE TABLE IF NOT EXISTS courses (
   notions TEXT,
   reading_time INTEGER DEFAULT 5,
   note TEXT,
-  created_at TEXT DEFAULT (datetime('now')),
-  published_at TEXT
+  created_at TIMESTAMPTZ DEFAULT now(),
+  published_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS course_pages (
@@ -143,10 +196,11 @@ CREATE TABLE IF NOT EXISTS course_pages (
   course_id TEXT NOT NULL,
   position INTEGER DEFAULT 0,
   image_url TEXT,
+  image_data TEXT,
   label TEXT,
   ocr_text TEXT,
   quality TEXT DEFAULT 'Net',
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS flashcards (
@@ -157,18 +211,18 @@ CREATE TABLE IF NOT EXISTS flashcards (
   front TEXT NOT NULL,
   back TEXT NOT NULL,
   tag TEXT DEFAULT 'Notion clé',
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS flashcard_reviews (
   flashcard_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   ease REAL DEFAULT 2.5,
-  interval INTEGER DEFAULT 0,
+  interval_days INTEGER DEFAULT 0,
   reps INTEGER DEFAULT 0,
   due_date TEXT,
   last_grade INTEGER,
-  last_reviewed TEXT,
+  last_reviewed TIMESTAMPTZ,
   PRIMARY KEY (flashcard_id, user_id)
 );
 
@@ -176,7 +230,7 @@ CREATE TABLE IF NOT EXISTS quizzes (
   id TEXT PRIMARY KEY,
   course_id TEXT NOT NULL,
   title TEXT DEFAULT 'Quiz de groupe',
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS quiz_questions (
@@ -196,7 +250,7 @@ CREATE TABLE IF NOT EXISTS quiz_attempts (
   score INTEGER,
   total INTEGER,
   answers TEXT,
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS capsules (
@@ -212,7 +266,7 @@ CREATE TABLE IF NOT EXISTS capsules (
   challenge_question TEXT,
   challenge_options TEXT,
   challenge_correct_index INTEGER,
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS calendar_events (
@@ -229,7 +283,7 @@ CREATE TABLE IF NOT EXISTS calendar_events (
   location TEXT,
   scribe_id TEXT,
   status TEXT DEFAULT 'todo',
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS chat_threads (
@@ -237,7 +291,7 @@ CREATE TABLE IF NOT EXISTS chat_threads (
   group_id TEXT NOT NULL,
   name TEXT NOT NULL,
   kind TEXT DEFAULT 'topic',
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS chat_messages (
@@ -249,7 +303,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   body TEXT,
   attachment_url TEXT,
   card_ref TEXT,
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS notifications (
@@ -261,7 +315,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   body TEXT,
   meta TEXT,
   read INTEGER DEFAULT 0,
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS missed_days (
@@ -279,7 +333,9 @@ CREATE INDEX IF NOT EXISTS idx_notifs_user ON notifications(user_id, read);
 CREATE INDEX IF NOT EXISTS idx_events_group ON calendar_events(group_id, date);
 `;
 
-db.exec(SCHEMA);
+export async function migrate() {
+  await db.exec(SCHEMA);
+}
 
 export const j = (v) => (v == null ? null : JSON.stringify(v));
 export const parseJson = (s, fallback = null) => {
@@ -289,3 +345,5 @@ export const parseJson = (s, fallback = null) => {
     return fallback;
   }
 };
+
+export const TODAY = () => new Date().toISOString().slice(0, 10);

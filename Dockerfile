@@ -16,7 +16,6 @@ COPY --from=build /app/package.json /app/package-lock.json ./
 COPY --from=build /app/server ./server
 COPY --from=build /app/web/dist ./web/dist
 COPY --from=build /app/node_modules ./node_modules
-ENV DATA_DIR=/data
-VOLUME /data
 EXPOSE 4000
-CMD ["node", "--disable-warning=ExperimentalWarning", "server/src/index.js"]
+# DATABASE_URL (PostgreSQL) doit être fourni via l'environnement.
+CMD ["node", "server/src/index.js"]

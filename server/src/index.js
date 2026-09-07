@@ -1,9 +1,11 @@
+import 'express-async-errors';
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
-import { PORT, UPLOAD_DIR, WEB_DIST } from './env.js';
+import { PORT, WEB_DIST } from './env.js';
+import { migrate, db } from './db.js';
 import { authMiddleware } from './auth.js';
 import { initRealtime } from './realtime.js';
 
@@ -19,16 +21,28 @@ import notificationRoutes from './routes/notifications.js';
 import meRoutes from './routes/me.js';
 import homeRoutes from './routes/home.js';
 
+await migrate();
+
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json({ limit: '4mb' }));
-app.use('/uploads', express.static(UPLOAD_DIR));
+app.use(express.json({ limit: '12mb' }));
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'classmemo' }));
 
+// Images des notes manuscrites, stockées en base (base64).
+app.get('/uploads/:pageId', async (req, res) => {
+  const row = await db.get('SELECT image_data FROM course_pages WHERE id = ?', req.params.pageId);
+  if (!row?.image_data) return res.status(404).end();
+  const [meta, b64] = row.image_data.startsWith('data:')
+    ? [row.image_data.slice(5, row.image_data.indexOf(';')), row.image_data.split(',')[1]]
+    : ['image/jpeg', row.image_data];
+  res.set('Content-Type', meta || 'image/jpeg');
+  res.set('Cache-Control', 'public, max-age=31536000, immutable');
+  res.send(Buffer.from(b64, 'base64'));
+});
+
 app.use('/api/auth', authRoutes);
 
-// tout le reste exige une session
 const api = express.Router();
 api.use(authMiddleware);
 api.use('/groups', groupRoutes);
@@ -44,10 +58,11 @@ api.use('/', homeRoutes);
 app.use('/api', api);
 app.use('/api', (req, res) => res.status(404).json({ error: `Route inconnue : ${req.method} ${req.path}` }));
 
-// Sert le front compilé (déploiement single-origin) si présent.
+// Front compilé (déploiement single-origin) si présent.
 if (fs.existsSync(WEB_DIST)) {
   app.use(express.static(WEB_DIST));
-  app.get(/^(?!\/api|\/uploads|\/socket\.io).*/, (_req, res) => {
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' || req.path.startsWith('/api') || req.path.startsWith('/uploads')) return next();
     res.sendFile(path.join(WEB_DIST, 'index.html'));
   });
   console.log(`Front servi depuis ${WEB_DIST}`);

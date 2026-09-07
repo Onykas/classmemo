@@ -15,14 +15,15 @@ Chaîne complète et fonctionnelle :
 
 | Côté | Techno |
 |---|---|
-| Front | React 18 + Vite + Tailwind + React Router + socket.io-client + tesseract.js |
-| API | Node + Express + better-sqlite3 + JWT + Socket.IO + `@anthropic-ai/sdk` |
-| Données | SQLite (`server/classmemo.db`, créé au 1er lancement) |
+| Front | React 18 + Vite + Tailwind + React Router + socket.io-client + tesseract.js (PWA installable) |
+| API | Node + Express + PostgreSQL (`pg`) + JWT + Socket.IO + `@anthropic-ai/sdk` |
+| Données | PostgreSQL en prod (`DATABASE_URL`) · **PGlite** en local (`server/pgdata/`, zéro installation) |
 
 ## Prérequis
 
-- **Node.js ≥ 20** (le serveur utilise `node --watch`).
+- **Node.js ≥ 22** (le serveur utilise `node --watch`).
 - Connexion internet au 1er usage de l'OCR (téléchargement du modèle `fra` tesseract) et pour les appels API Claude.
+- Aucune base de données à installer en local : sans `DATABASE_URL`, PGlite prend le relais.
 
 ## Installation
 
@@ -35,9 +36,9 @@ npm run dev            # lance l'API (:4000) et le front (:5173) ensemble
 
 Puis ouvrir **http://localhost:5173**.
 
-> **Mettre en ligne pour de vrai** (URL à partager avec des amis) : voir **[DEPLOY.md](DEPLOY.md)**.
-> Le serveur sert aussi le front compilé : c'est **un seul service** à héberger (Railway / Fly.io / Render),
-> avec un petit disque persistant pour la base et les images.
+> **Mettre en ligne gratuitement** (URL à partager avec des amis) : voir **[DEPLOY.md](DEPLOY.md)**
+> — base PostgreSQL gratuite chez Neon + serveur gratuit chez Render, sans carte bancaire.
+> Le serveur sert aussi le front compilé : **un seul service** à héberger.
 
 ### Comptes de démonstration
 
@@ -77,8 +78,8 @@ Le modèle utilisé se choisit dans le profil (`claude-opus-5` par défaut, `cla
 
 ```
 server/src
-  index.js          entrée Express + Socket.IO
-  db.js             schéma SQLite
+  index.js          entrée Express + Socket.IO + service du front + /uploads
+  db.js             schéma + couche PostgreSQL (pg en prod, PGlite en local)
   auth.js           JWT + bcrypt
   anthropic.js      génération IA + repli heuristique
   sm2.js            répétition espacée
@@ -98,6 +99,6 @@ web/src
 
 ## Remarques
 
-- L'OCR tourne entièrement dans le navigateur ; aucune image n'est envoyée à un tiers.
-- Les uploads d'images sont stockés localement dans `server/uploads/`.
-- `better-sqlite3` est un module natif : si l'installation échoue sous Windows, installer les *Build Tools* (`npm i -g windows-build-tools`) ou utiliser une version LTS de Node.
+- L'OCR tourne entièrement dans le navigateur ; l'image est réduite avant envoi (max 1600 px, JPEG).
+- Les photos des notes sont stockées **dans la base** (base64) et servies via `/uploads/:id` — rien sur le disque, compatible hébergement éphémère.
+- Aucune dépendance native : `pg` et PGlite sont en pur JS/WASM.

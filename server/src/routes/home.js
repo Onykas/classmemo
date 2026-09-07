@@ -1,32 +1,33 @@
 import { Router } from 'express';
-import { db } from '../db.js';
+import { db, TODAY } from '../db.js';
 import { memberGuard, membersOfGroup, serializeCourse } from './_helpers.js';
 
 const router = Router();
 
-const daysAgo = (iso) => {
-  if (!iso) return null;
-  const d = Math.round((Date.now() - new Date(iso.replace(' ', 'T') + 'Z').getTime()) / 86400000);
+const daysAgo = (v) => {
+  if (!v) return null;
+  const t = v instanceof Date ? v.getTime() : new Date(v).getTime();
+  const d = Math.round((Date.now() - t) / 86400000);
   return Number.isFinite(d) ? d : null;
 };
 
-router.get('/home', memberGuard('query', 'groupId'), (req, res) => {
+router.get('/home', memberGuard('query', 'groupId'), async (req, res) => {
   const gid = req.groupId;
-  const group = db.prepare('SELECT * FROM groups WHERE id = ?').get(gid);
-  const members = membersOfGroup(gid);
+  const today = TODAY();
+  const group = await db.get('SELECT * FROM groups WHERE id = ?', gid);
+  const members = await membersOfGroup(gid);
 
-  const recentCourseRow = db
-    .prepare("SELECT * FROM courses WHERE group_id = ? AND status = 'published' ORDER BY published_at DESC, date DESC LIMIT 1")
-    .get(gid);
-  const recentCourse = recentCourseRow ? serializeCourse(recentCourseRow) : null;
+  const recentCourseRow = await db.get(
+    "SELECT * FROM courses WHERE group_id = ? AND status = 'published' ORDER BY published_at DESC, date DESC LIMIT 1",
+    gid,
+  );
+  const recentCourse = recentCourseRow ? await serializeCourse(recentCourseRow) : null;
 
-  // activité vivante du groupe
-  const lastMsg = db
-    .prepare(
-      `SELECT m.*, u.name AS uname FROM chat_messages m LEFT JOIN users u ON u.id = m.user_id
-        WHERE m.group_id = ? ORDER BY m.created_at DESC LIMIT 1`,
-    )
-    .get(gid);
+  const lastMsg = await db.get(
+    `SELECT m.*, u.name AS uname FROM chat_messages m LEFT JOIN users u ON u.id = m.user_id
+      WHERE m.group_id = ? ORDER BY m.created_at DESC LIMIT 1`,
+    gid,
+  );
   const activeCount = members.filter((m) => m.presence === 'active').length;
   let activity = 'Ta tablée est calme pour le moment.';
   if (lastMsg?.kind === 'system') activity = lastMsg.body;
@@ -35,51 +36,48 @@ router.get('/home', memberGuard('query', 'groupId'), (req, res) => {
     activity = `${author?.name || 'Un·e camarade'} a déposé « ${recentCourseRow.title} »`;
   }
 
-  // à réviser : spotlight
-  const spotlight = db
-    .prepare(
-      `SELECT f.front, f.back, f.tag, r.last_reviewed FROM flashcards f
-         LEFT JOIN flashcard_reviews r ON r.flashcard_id = f.id AND r.user_id = @uid
-         LEFT JOIN courses c ON c.id = f.course_id
-        WHERE f.group_id = @gid AND c.status = 'published'
-          AND (r.due_date IS NULL OR r.due_date <= date('now'))
-        ORDER BY r.last_reviewed IS NULL DESC, r.last_reviewed ASC LIMIT 1`,
-    )
-    .get({ uid: req.user.id, gid });
-  const dueCards = db
-    .prepare(
-      `SELECT COUNT(*) n FROM flashcards f
-         LEFT JOIN flashcard_reviews r ON r.flashcard_id = f.id AND r.user_id = @uid
-         LEFT JOIN courses c ON c.id = f.course_id
-        WHERE f.group_id = @gid AND c.status = 'published'
-          AND (r.due_date IS NULL OR r.due_date <= date('now'))`,
-    )
-    .get({ uid: req.user.id, gid }).n;
+  const spotlight = await db.get(
+    `SELECT f.front, f.back, f.tag, r.last_reviewed FROM flashcards f
+       LEFT JOIN flashcard_reviews r ON r.flashcard_id = f.id AND r.user_id = @uid
+       LEFT JOIN courses c ON c.id = f.course_id
+      WHERE f.group_id = @gid AND c.status = 'published'
+        AND (r.due_date IS NULL OR r.due_date <= @today)
+      ORDER BY (r.last_reviewed IS NULL) DESC, r.last_reviewed ASC LIMIT 1`,
+    { uid: req.user.id, gid, today },
+  );
+  const dueCards = Number(
+    (
+      await db.get(
+        `SELECT COUNT(*) n FROM flashcards f
+           LEFT JOIN flashcard_reviews r ON r.flashcard_id = f.id AND r.user_id = @uid
+           LEFT JOIN courses c ON c.id = f.course_id
+          WHERE f.group_id = @gid AND c.status = 'published'
+            AND (r.due_date IS NULL OR r.due_date <= @today)`,
+        { uid: req.user.id, gid, today },
+      )
+    ).n,
+  );
 
-  // aujourd'hui : évènements du jour + cours récents
-  const today = new Date().toISOString().slice(0, 10);
-  const events = db
-    .prepare('SELECT * FROM calendar_events WHERE group_id = ? AND date = ? ORDER BY start_time')
-    .all(gid, today)
-    .map((e) => ({
-      kind: 'event',
-      time: e.start_time || '—',
-      title: e.title,
-      subtitle: e.location ? `${e.subject_label || ''} • ${e.location}` : e.subject_label || '',
-      colorKey: e.color_key,
-      ref: { type: 'calendar' },
-    }));
+  const events = (
+    await db.all('SELECT * FROM calendar_events WHERE group_id = ? AND date = ? ORDER BY start_time', gid, today)
+  ).map((e) => ({
+    kind: 'event',
+    time: e.start_time || '—',
+    title: e.title,
+    subtitle: e.location ? `${e.subject_label || ''} • ${e.location}` : e.subject_label || '',
+    colorKey: e.color_key,
+    ref: { type: 'calendar' },
+  }));
 
-  const newCourses = db
-    .prepare("SELECT * FROM courses WHERE group_id = ? AND status = 'published' AND date = ? ")
-    .all(gid, today)
-    .map((c) => ({
-      kind: 'course',
-      time: 'auj.',
-      title: c.title,
-      subtitle: 'Nouvelles notes partagées',
-      ref: { type: 'course', id: c.id },
-    }));
+  const newCourses = (
+    await db.all("SELECT * FROM courses WHERE group_id = ? AND status = 'published' AND date = ?", gid, today)
+  ).map((c) => ({
+    kind: 'course',
+    time: 'auj.',
+    title: c.title,
+    subtitle: 'Nouvelles notes partagées',
+    ref: { type: 'course', id: c.id },
+  }));
 
   const todayItems = [...events, ...newCourses];
   if (spotlight) {

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth.jsx';
 import { get, post, upload } from '../api.js';
 import { recognize } from '../lib/ocr.js';
+import { downscaleImage } from '../lib/image.js';
 import { BackBar, Btn, Card, Icon, ScreenLoader, SubjectChip, useToast } from '../components/ui.jsx';
 import { formatDate } from '../lib/format.js';
 
@@ -35,11 +36,12 @@ export default function AddNotes() {
   if (!subjects) return <ScreenLoader />;
   const subject = subjects.find((s) => s.id === subjectId);
 
-  function onFiles(e) {
+  async function onFiles(e) {
     const files = [...(e.target.files || [])];
     e.target.value = '';
-    for (const file of files) {
+    for (const original of files) {
       const localId = `p${++localSeq}`;
+      const file = await downscaleImage(original);
       const previewUrl = URL.createObjectURL(file);
       setPages((p) => [
         ...p,

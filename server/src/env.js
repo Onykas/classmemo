@@ -19,6 +19,9 @@ export const PORT = Number(process.env.PORT || 4000);
 export const JWT_SECRET = process.env.JWT_SECRET || 'classmemo-dev-secret-change-me';
 export const DEFAULT_ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || '';
 
+// PostgreSQL en prod (Neon/Render). Absent en local -> PGlite (fichier server/pgdata).
+export const DATABASE_URL = process.env.DATABASE_URL || '';
+
 // En production, on peut monter un disque persistant et pointer DATA_DIR dessus
 // (ex. DATA_DIR=/data). Par défaut : le dossier server/.
 export const DATA_DIR = process.env.DATA_DIR || ROOT;

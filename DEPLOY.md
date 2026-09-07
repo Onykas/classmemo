@@ -1,92 +1,86 @@
-# Mettre ClassMemo en ligne
+# Mettre ClassMemo en ligne — gratuitement
 
-ClassMemo est **une seule application** : le serveur Node sert aussi le front compilé.
-Il faut donc juste héberger ce serveur Node quelque part, avec **un disque persistant**
-(pour la base SQLite `classmemo.db` et les images uploadées, montés sur `/data`).
+ClassMemo = **une seule application** (le serveur Node sert aussi le site).
+Hébergement 100 % gratuit, sans carte bancaire :
 
-Aucune config front à changer : le navigateur parle au serveur sur la même adresse.
+- **Base de données** : PostgreSQL gratuit chez **Neon** (`neon.tech`)
+- **Serveur** : plan **gratuit** de **Render** (`render.com`)
 
-## Variables d'environnement
-
-| Variable | Rôle | Obligatoire |
-|---|---|---|
-| `DATA_DIR` | dossier du disque persistant (ex. `/data`) | oui en prod |
-| `JWT_SECRET` | secret de session (chaîne aléatoire longue) | oui |
-| `ANTHROPIC_API_KEY` | clé Claude par défaut (sinon mode heuristique local, ou clé par utilisateur dans Profil) | non |
-| `PORT` | fourni par l'hébergeur en général | non |
+En local, aucune base à installer : sans `DATABASE_URL`, l'app utilise PGlite
+(PostgreSQL embarqué, fichier `server/pgdata/`).
 
 ---
 
-## Option A — Railway (le plus simple, ~5 $/mois)
+## Étape 1 — Envoyer le code sur GitHub
 
-1. Créer un compte sur https://railway.app
-2. **New Project → Deploy from GitHub repo** (ou *Empty project* puis `railway up` depuis ce dossier avec la CLI).
-3. Railway détecte le `Dockerfile` automatiquement.
-4. Onglet **Variables** : ajouter `DATA_DIR=/data`, `JWT_SECRET=<colle une longue chaîne aléatoire>`, éventuellement `ANTHROPIC_API_KEY`.
-5. Onglet **Settings → Volumes** : *New Volume*, mount path `/data`.
-6. **Deploy**. Railway donne une URL `https://classmemo-production.up.railway.app` → à partager.
-
-## Option B — Fly.io (~3 $/mois, sans GitHub)
-
-Prérequis : installer `flyctl` (https://fly.io/docs/flyctl/install) et `fly auth login`.
+Tu es déjà connectée (`gh auth status` → compte `Onykas`). Dans un terminal :
 
 ```bash
-cd classmemo
-fly launch --no-deploy --copy-config --name classmemo   # garde le fly.toml existant
-fly volumes create classmemo_data --size 1 --region cdg
-fly secrets set JWT_SECRET=$(openssl rand -hex 32)
-fly secrets set ANTHROPIC_API_KEY=sk-ant-...             # facultatif
-fly deploy
+cd C:\Users\admin\classmemo
+gh repo create classmemo --private --source=. --remote=origin --push
 ```
 
-URL : `https://classmemo.fly.dev`.
+*(ou : crée un dépôt vide `classmemo` sur github.com, puis
+`git remote add origin https://github.com/Onykas/classmemo.git && git push -u origin main`)*
 
-## Option C — Render.com (clic, ~7 $/mois pour le disque)
+## Étape 2 — Base de données Neon (gratuit, sans carte)
 
-1. Pousser le code sur GitHub (voir plus bas).
-2. https://dashboard.render.com → **New + → Blueprint** → sélectionner le dépôt.
-3. Render lit `render.yaml` : crée le service web + le disque `/data` + `JWT_SECRET`.
-4. Renseigner `ANTHROPIC_API_KEY` si voulu, puis **Apply**.
-5. URL : `https://classmemo.onrender.com`.
+1. Va sur **https://neon.tech** → *Sign up* (avec GitHub, c'est instantané).
+2. *Create project* → nom `classmemo`, région **Europe (Frankfurt)**.
+3. Sur le tableau de bord, bloc **Connection string** → copie l'URL qui
+   commence par `postgresql://…` (garde `?sslmode=require` à la fin).
+   Garde-la de côté pour l'étape 3.
 
-> Le plan gratuit de Render **ne permet pas de disque persistant** : la base serait
-> remise à zéro à chaque redémarrage. Prendre le plan *Starter* payant.
+## Étape 3 — Serveur Render (plan gratuit)
+
+1. Va sur **https://render.com** → *Sign up* avec GitHub.
+2. **New + → Blueprint** → choisis le dépôt `classmemo`.
+3. Render lit `render.yaml` et propose le service `classmemo` (plan **Free**).
+4. Il demande les valeurs `sync:false` :
+   - **`DATABASE_URL`** → colle l'URL Neon de l'étape 2
+   - **`ANTHROPIC_API_KEY`** → ta clé Claude si tu en as une, sinon laisse vide
+   - (`JWT_SECRET` est généré automatiquement)
+5. **Apply**. Premier build ≈ 3–4 min.
+6. URL finale : `https://classmemo.onrender.com` (ou proche) → **c'est le lien à partager**.
+
+> Plan gratuit Render : le serveur s'endort après 15 min sans visite et met
+> ~30–50 s à se réveiller à la visite suivante. Les données, elles, restent
+> chez Neon en permanence.
+
+## Étape 4 — Tes amis
+
+Ils ouvrent le lien sur leur téléphone → menu du navigateur →
+**« Ajouter à l'écran d'accueil »**. L'app s'installe avec son icône.
+Le premier crée un compte + une **tablée**, et partage le code `CLAS-XXXX`
+aux autres pour qu'ils rejoignent.
 
 ---
 
-## Pousser sur GitHub (nécessaire pour Render / option GitHub de Railway)
+## Données de démonstration (facultatif)
+
+La base en ligne démarre **vide**. Pour y injecter le jeu de démo (⚠️ efface
+tout ce qui existe) : dans Render, onglet **Shell** du service →
 
 ```bash
-cd classmemo
-git init
-git add .
-git commit -m "ClassMemo — application complète"
-git branch -M main
-git remote add origin https://github.com/<ton-compte>/classmemo.git
-git push -u origin main
+npm run seed
 ```
 
-Le `.gitignore` exclut déjà `node_modules`, la base locale et les uploads.
+Comptes créés : `thomas@classmemo.app` … / mot de passe `demo1234` /
+tablée `CLAS-8942`.
 
 ---
 
-## Données de démo en production (facultatif)
+## Alternatives (payantes, toujours allumées)
 
-Par défaut la base en ligne est **vide** : le premier utilisateur s'inscrit, crée une
-tablée, partage le code `CLAS-XXXX` aux autres. C'est le fonctionnement voulu.
+- **Railway** (~5 $/mois) : *Deploy from GitHub repo*, détecte le `Dockerfile`,
+  ajoute `DATABASE_URL` (ou une base Postgres Railway), pas de mise en veille.
+- **Fly.io** (~3 $/mois) : `fly launch` + `fly deploy` depuis ce dossier
+  (`fly.toml` fourni), `fly secrets set DATABASE_URL=… JWT_SECRET=…`.
 
-Pour injecter le jeu de démo (efface tout !) une fois déployé :
-
-- Railway : `railway run npm run seed`
-- Fly : `fly ssh console -C "node --disable-warning=ExperimentalWarning server/src/seed.js"`
-- Render : *Shell* du service → `npm run seed`
-
----
-
-## Tester l'image en local avec Docker
+## Tester l'image Docker en local
 
 ```bash
 docker build -t classmemo .
-docker run -p 4000:4000 -e JWT_SECRET=dev -v classmemo_data:/data classmemo
+docker run -p 4000:4000 -e JWT_SECRET=dev -e DATABASE_URL="postgresql://…" classmemo
 # → http://localhost:4000
 ```

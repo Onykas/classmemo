@@ -7,34 +7,42 @@ let io = null;
 export function initRealtime(httpServer) {
   io = new Server(httpServer, { cors: { origin: true, credentials: true } });
 
-  io.on('connection', (socket) => {
-    const user = userFromToken(socket.handshake.auth?.token);
+  io.on('connection', async (socket) => {
+    const user = await userFromToken(socket.handshake.auth?.token);
     if (!user) {
       socket.disconnect(true);
       return;
     }
     socket.data.userId = user.id;
 
-    const groups = db.prepare('SELECT group_id FROM group_members WHERE user_id = ?').all(user.id);
+    const groups = await db.all('SELECT group_id FROM group_members WHERE user_id = ?', user.id);
     for (const g of groups) socket.join('group:' + g.group_id);
-    setPresenceAll(user.id, 'active');
+    await setPresenceAll(user.id, 'active');
     for (const g of groups) {
       io.to('group:' + g.group_id).emit('presence', { userId: user.id, state: 'active' });
     }
 
-    socket.on('presence', ({ groupId, state = 'active', activity = null }) => {
-      db.prepare(
-        "UPDATE group_members SET presence = ?, activity = ?, last_seen = datetime('now') WHERE user_id = ? AND group_id = ?",
-      ).run(state, activity, user.id, groupId);
-      io.to('group:' + groupId).emit('presence', { userId: user.id, state, activity });
+    socket.on('presence', async ({ groupId, state = 'active', activity = null }) => {
+      try {
+        await db.run(
+          'UPDATE group_members SET presence = ?, activity = ?, last_seen = now() WHERE user_id = ? AND group_id = ?',
+          state,
+          activity,
+          user.id,
+          groupId,
+        );
+        io.to('group:' + groupId).emit('presence', { userId: user.id, state, activity });
+      } catch {
+        /* ignore */
+      }
     });
 
     socket.on('typing', ({ groupId, threadId }) => {
       socket.to('group:' + groupId).emit('typing', { userId: user.id, threadId, name: user.name });
     });
 
-    socket.on('disconnect', () => {
-      setPresenceAll(user.id, 'offline');
+    socket.on('disconnect', async () => {
+      await setPresenceAll(user.id, 'offline').catch(() => {});
       for (const g of groups) {
         io.to('group:' + g.group_id).emit('presence', { userId: user.id, state: 'offline' });
       }
@@ -45,7 +53,7 @@ export function initRealtime(httpServer) {
 }
 
 function setPresenceAll(userId, state) {
-  db.prepare("UPDATE group_members SET presence = ?, last_seen = datetime('now') WHERE user_id = ?").run(state, userId);
+  return db.run('UPDATE group_members SET presence = ?, last_seen = now() WHERE user_id = ?', state, userId);
 }
 
 export const emitToGroup = (groupId, event, data) => {

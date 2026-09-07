@@ -7,23 +7,27 @@ export const hashPassword = (pw) => bcrypt.hashSync(pw, 10);
 export const checkPassword = (pw, h) => bcrypt.compareSync(pw, h);
 export const signToken = (user) => jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '30d' });
 
-export function userFromToken(token) {
+export async function userFromToken(token) {
   if (!token) return null;
   try {
     const { id } = jwt.verify(token, JWT_SECRET);
-    return db.prepare('SELECT * FROM users WHERE id = ?').get(id) || null;
+    return (await db.get('SELECT * FROM users WHERE id = ?', id)) || null;
   } catch {
     return null;
   }
 }
 
-export function authMiddleware(req, res, next) {
-  const header = req.headers.authorization || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
-  const user = userFromToken(token);
-  if (!user) return res.status(401).json({ error: 'Non authentifié·e' });
-  req.user = user;
-  next();
+export async function authMiddleware(req, res, next) {
+  try {
+    const header = req.headers.authorization || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+    const user = await userFromToken(token);
+    if (!user) return res.status(401).json({ error: 'Non authentifié·e' });
+    req.user = user;
+    next();
+  } catch (err) {
+    next(err);
+  }
 }
 
 export function publicUser(u) {

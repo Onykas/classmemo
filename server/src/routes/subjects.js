@@ -4,16 +4,17 @@ import { newId, memberGuard, serializeCourse } from './_helpers.js';
 
 const router = Router();
 
-function serializeSubject(s) {
-  const courseCount = db
-    .prepare("SELECT COUNT(*) n FROM courses WHERE subject_id = ? AND status = 'published'")
-    .get(s.id).n;
-  const flashcardCount = db.prepare('SELECT COUNT(*) n FROM flashcards WHERE subject_id = ?').get(s.id).n;
-  const lastCourse = db
-    .prepare(
-      "SELECT * FROM courses WHERE subject_id = ? AND status = 'published' ORDER BY date DESC, created_at DESC LIMIT 1",
-    )
-    .get(s.id);
+async function serializeSubject(s) {
+  const courseCount = Number(
+    (await db.get("SELECT COUNT(*) n FROM courses WHERE subject_id = ? AND status = 'published'", s.id)).n,
+  );
+  const flashcardCount = Number(
+    (await db.get('SELECT COUNT(*) n FROM flashcards WHERE subject_id = ?', s.id)).n,
+  );
+  const lastCourse = await db.get(
+    "SELECT * FROM courses WHERE subject_id = ? AND status = 'published' ORDER BY date DESC, created_at DESC LIMIT 1",
+    s.id,
+  );
   return {
     id: s.id,
     groupId: s.group_id,
@@ -24,38 +25,43 @@ function serializeSubject(s) {
     semester: s.semester,
     courseCount,
     flashcardCount,
-    lastCourse: lastCourse ? serializeCourse(lastCourse, { withContent: false }) : null,
+    lastCourse: lastCourse ? await serializeCourse(lastCourse, { withContent: false }) : null,
   };
 }
 
-router.get('/groups/:gid/subjects', memberGuard(), (req, res) => {
-  const rows = db
-    .prepare('SELECT * FROM subjects WHERE group_id = ? ORDER BY created_at ASC')
-    .all(req.params.gid);
-  res.json(rows.map(serializeSubject));
+router.get('/groups/:gid/subjects', memberGuard(), async (req, res) => {
+  const rows = await db.all('SELECT * FROM subjects WHERE group_id = ? ORDER BY created_at ASC', req.params.gid);
+  res.json(await Promise.all(rows.map(serializeSubject)));
 });
 
-router.post('/groups/:gid/subjects', memberGuard(), (req, res) => {
+router.post('/groups/:gid/subjects', memberGuard(), async (req, res) => {
   const { name, colorKey = 'psm', description = null, semester = null } = req.body || {};
   if (!name) return res.status(400).json({ error: 'Nom de matière requis' });
   const id = newId();
-  db.prepare(
+  await db.run(
     'INSERT INTO subjects (id, group_id, name, color_key, description, semester) VALUES (?, ?, ?, ?, ?, ?)',
-  ).run(id, req.params.gid, String(name).trim(), colorKey, description, semester);
-  res.json(serializeSubject(db.prepare('SELECT * FROM subjects WHERE id = ?').get(id)));
+    id,
+    req.params.gid,
+    String(name).trim(),
+    colorKey,
+    description,
+    semester,
+  );
+  res.json(await serializeSubject(await db.get('SELECT * FROM subjects WHERE id = ?', id)));
 });
 
-router.get('/subjects/:id', (req, res) => {
-  const s = db.prepare('SELECT * FROM subjects WHERE id = ?').get(req.params.id);
+router.get('/subjects/:id', async (req, res) => {
+  const s = await db.get('SELECT * FROM subjects WHERE id = ?', req.params.id);
   if (!s) return res.status(404).json({ error: 'Matière introuvable' });
-  if (!db.prepare('SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?').get(s.group_id, req.user.id)) {
+  if (!(await db.get('SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?', s.group_id, req.user.id))) {
     return res.status(403).json({ error: 'Accès refusé' });
   }
-  const courses = db
-    .prepare("SELECT * FROM courses WHERE subject_id = ? AND status = 'published' ORDER BY date DESC")
-    .all(s.id)
-    .map((c) => serializeCourse(c, { withContent: false }));
-  res.json({ ...serializeSubject(s), courses });
+  const rows = await db.all(
+    "SELECT * FROM courses WHERE subject_id = ? AND status = 'published' ORDER BY date DESC",
+    s.id,
+  );
+  const courses = await Promise.all(rows.map((c) => serializeCourse(c, { withContent: false })));
+  res.json({ ...(await serializeSubject(s)), courses });
 });
 
 export default router;
