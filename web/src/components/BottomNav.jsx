@@ -5,6 +5,7 @@ const TABS = [
   { to: '/', icon: 'home', label: 'Accueil', end: true },
   { to: '/subjects', icon: 'menu_book', label: 'Cours' },
   { to: '/review', icon: 'psychology', label: 'Révision', key: 'review' },
+  { to: '/chat', icon: 'forum', label: 'Chat' },
   { to: '/notifications', icon: 'notifications', label: 'Notifs', key: 'notifs' },
   { to: '/profile', icon: 'person', label: 'Profil' },
 ];
@@ -19,7 +20,7 @@ export default function BottomNav({ dueCount = 0, unread = 0 }) {
             to={t.to}
             end={t.end}
             className={({ isActive }) =>
-              `relative flex flex-col items-center justify-center gap-1 w-14 h-12 rounded-xl transition-all active:scale-95 ${
+              `relative flex flex-col items-center justify-center gap-1 flex-1 max-w-[4.5rem] h-12 rounded-xl transition-all active:scale-95 ${
                 isActive ? 'text-primary font-bold' : 'text-on-surface-variant'
               }`
             }

@@ -66,3 +66,12 @@ export const emitToUser = (userId, event, data) => {
     if (socket.data.userId === userId) socket.emit(event, data);
   }
 };
+
+// Une session socket ouverte pour cet utilisateur ? (= app au premier plan)
+export const isUserOnline = (userId) => {
+  if (!io) return false;
+  for (const [, socket] of io.of('/').sockets) {
+    if (socket.data.userId === userId) return true;
+  }
+  return false;
+};
