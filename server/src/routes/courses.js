@@ -4,6 +4,7 @@ import { db, j, parseJson } from '../db.js';
 import { newId, memberGuard, courseGuard, serializeCourse, notify, membersOfGroup } from './_helpers.js';
 import { generateStudyKit } from '../anthropic.js';
 import { emitToGroup, emitToUser } from '../realtime.js';
+import { sendPush } from '../push.js';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024 } });
@@ -292,14 +293,17 @@ router.post('/courses/:id/publish', courseGuard, async (req, res) => {
 
   for (const m of await membersOfGroup(c.group_id)) {
     if (m.id === req.user.id) continue;
+    const title = `Notes de ${subjLabel} déposées`;
+    const bodyText = `${req.user.name} a partagé la transcription, ${c.reading_time || 5} min de lecture + flashcards.`;
     const n = await notify(m.id, {
       groupId: c.group_id,
       kind: 'course',
-      title: `Notes de ${subjLabel} déposées`,
-      body: `${req.user.name} a partagé la transcription, ${c.reading_time || 5} min de lecture + flashcards.`,
+      title,
+      body: bodyText,
       meta: { courseId: c.id },
     });
     emitToUser(m.id, 'notification', n);
+    sendPush(m.id, { title, body: bodyText, url: `/courses/${c.id}`, tag: `course-${c.id}` }).catch(() => {});
   }
 
   await db.run("UPDATE calendar_events SET status = 'validated' WHERE course_id = ?", c.id);
