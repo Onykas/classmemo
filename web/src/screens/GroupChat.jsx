@@ -28,6 +28,25 @@ export default function GroupChat() {
     get(`/threads/${activeThread}/messages`).then(setMessages);
   }, [activeThread]);
 
+  // Signale au serveur quel fil on regarde (pas de push pour ce fil).
+  useEffect(() => {
+    if (!socket || !activeThread) return;
+    const ping = () => socket.emit('chat:viewing', { threadId: activeThread });
+    ping();
+    const onReconnect = () => ping();
+    socket.on('connect', onReconnect);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') ping();
+      else socket.emit('chat:viewing', { threadId: null });
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      socket.emit('chat:viewing', { threadId: null });
+      socket.off('connect', onReconnect);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [socket, activeThread]);
+
   useEffect(() => {
     if (!socket) return;
     const onMsg = (m) => {

@@ -1,20 +1,21 @@
 import { Router } from 'express';
 import { db, parseJson } from '../db.js';
 import { newId, memberGuard, membersOfGroup } from './_helpers.js';
-import { emitToGroup, isUserOnline } from '../realtime.js';
+import { emitToGroup, isViewingThread } from '../realtime.js';
 import { sendPush } from '../push.js';
 
 const router = Router();
 
-// Anti-spam : au plus un push de chat par (destinataire, fil) toutes les 90 s.
+// Anti-spam : au plus un push de chat par (destinataire, fil) toutes les 60 s.
 const lastChatPush = new Map();
-const CHAT_PUSH_COOLDOWN = 90_000;
+const CHAT_PUSH_COOLDOWN = 60_000;
 
-async function pushChatToOffline(thread, sender, text) {
+async function notifyChatMessage(thread, sender, text) {
   const preview = (text || '').replace(/\s+/g, ' ').trim().slice(0, 120) || 'a envoyé une pièce jointe';
   const now = Date.now();
   for (const m of await membersOfGroup(thread.group_id)) {
-    if (m.id === sender.id || isUserOnline(m.id)) continue;
+    // On saute l'auteur et toute personne qui regarde déjà ce fil.
+    if (m.id === sender.id || isViewingThread(m.id, thread.id)) continue;
     const key = `${m.id}:${thread.id}`;
     if (now - (lastChatPush.get(key) || 0) < CHAT_PUSH_COOLDOWN) continue;
     lastChatPush.set(key, now);
@@ -123,7 +124,7 @@ router.post('/threads/:tid/messages', threadGuard, async (req, res) => {
   emitToGroup(req.thread.group_id, 'chat:message', msg);
   res.json(msg);
 
-  pushChatToOffline(req.thread, req.user, body).catch(() => {});
+  notifyChatMessage(req.thread, req.user, body).catch(() => {});
 });
 
 export default router;

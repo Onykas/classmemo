@@ -41,6 +41,12 @@ export function initRealtime(httpServer) {
       socket.to('group:' + groupId).emit('typing', { userId: user.id, threadId, name: user.name });
     });
 
+    // Le client signale quel fil de chat il regarde (pour ne pas lui
+    // envoyer de push pour ce fil-là).
+    socket.on('chat:viewing', ({ threadId = null } = {}) => {
+      socket.data.viewingThread = threadId;
+    });
+
     socket.on('disconnect', async () => {
       await setPresenceAll(user.id, 'offline').catch(() => {});
       for (const g of groups) {
@@ -72,6 +78,15 @@ export const isUserOnline = (userId) => {
   if (!io) return false;
   for (const [, socket] of io.of('/').sockets) {
     if (socket.data.userId === userId) return true;
+  }
+  return false;
+};
+
+// L'utilisateur a-t-il ce fil de chat ouvert à l'écran en ce moment ?
+export const isViewingThread = (userId, threadId) => {
+  if (!io) return false;
+  for (const [, socket] of io.of('/').sockets) {
+    if (socket.data.userId === userId && socket.data.viewingThread === threadId) return true;
   }
   return false;
 };
