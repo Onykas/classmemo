@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { db } from '../db.js';
-import { newId, memberGuard, membersOfGroup } from './_helpers.js';
-import { emitToGroup } from '../realtime.js';
+import { newId, memberGuard, membersOfGroup, notify } from './_helpers.js';
+import { emitToGroup, emitToUser } from '../realtime.js';
+import { sendPush } from '../push.js';
 
 const router = Router();
 
@@ -73,6 +74,18 @@ router.post('/join', async (req, res) => {
   );
   emitToGroup(g.id, 'group:updated', { groupId: g.id });
   res.json(await serializeGroup(g));
+
+  // Prévenir les autres membres (hors réponse HTTP).
+  (async () => {
+    const title = `${req.user.name} a rejoint la tablée`;
+    const bodyText = `${req.user.name} fait maintenant partie de « ${g.name} ».`;
+    for (const m of await membersOfGroup(g.id)) {
+      if (m.id === req.user.id) continue;
+      const n = await notify(m.id, { groupId: g.id, kind: 'group', title, body: bodyText });
+      emitToUser(m.id, 'notification', n);
+      sendPush(m.id, { title, body: bodyText, url: '/profile', tag: `join-${g.id}` }).catch(() => {});
+    }
+  })().catch((e) => console.warn('[join notify]', e.message));
 });
 
 router.get('/:gid', memberGuard(), async (req, res) => {
