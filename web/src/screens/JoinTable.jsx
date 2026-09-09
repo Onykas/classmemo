@@ -14,6 +14,7 @@ export default function JoinTable() {
   const [newName, setNewName] = useState('');
   const [subject, setSubject] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
 
   // Déjà dans une tablée et on n'est pas venu volontairement en ajouter une :
   // on renvoie vers l'app (évite de rester bloqué sur cet écran).
@@ -92,10 +93,19 @@ export default function JoinTable() {
         </Btn>
       </Card>
 
-      {!addMode && (
+      {!addMode && !showCreate && (
+        <button
+          onClick={() => setShowCreate(true)}
+          className="text-body-sm text-on-surface-variant self-center underline mt-1"
+        >
+          Personne ne t'a donné de code ? Créer une nouvelle tablée
+        </button>
+      )}
+
+      {!addMode && showCreate && (
         <>
           <div className="flex items-center gap-3 text-caption uppercase tracking-wider text-on-surface-variant">
-            <span className="flex-1 h-px bg-outline-variant" /> ou commencez à zéro <span className="flex-1 h-px bg-outline-variant" />
+            <span className="flex-1 h-px bg-outline-variant" /> nouvelle tablée <span className="flex-1 h-px bg-outline-variant" />
           </div>
 
           <Card className="p-space-lg flex flex-col gap-space-sm">
@@ -105,6 +115,9 @@ export default function JoinTable() {
               </span>
               Créer une nouvelle tablée
             </h2>
+            <p className="text-caption text-on-surface-variant">
+              À faire par <b>une seule</b> personne du groupe. Les autres rejoignent avec le code.
+            </p>
             <input
               value={newName}
               onChange={(e) => setNewName(e.target.value)}

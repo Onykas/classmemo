@@ -35,6 +35,7 @@ export function AuthProvider({ children }) {
     try {
       const data = await api('/auth/me');
       applySession(data);
+      return data;
     } catch {
       setToken(null);
       setUser(null);
@@ -49,6 +50,39 @@ export function AuthProvider({ children }) {
     bootstrapped.current = true;
     refresh();
   }, [refresh]);
+
+  // Lien d'invitation : le code éventuel présent dans l'URL a été mémorisé
+  // très tôt (main.jsx) dans localStorage.cm_invite. Dès que la session est
+  // prête (après connexion si besoin), on rejoint automatiquement la tablée.
+  const joiningRef = useRef(false);
+  useEffect(() => {
+    if (!user || joiningRef.current) return;
+    let pending;
+    try {
+      pending = localStorage.getItem('cm_invite');
+    } catch {
+      pending = null;
+    }
+    if (!pending) return;
+    joiningRef.current = true;
+    (async () => {
+      try {
+        const g = await api('/groups/join', { method: 'POST', body: { code: pending } });
+        await refresh();
+        localStorage.setItem('cm_group', g.id);
+        setActiveGroupId(g.id);
+      } catch {
+        /* code invalide ou tablée pleine : on laisse tomber silencieusement */
+      } finally {
+        try {
+          localStorage.removeItem('cm_invite');
+        } catch {
+          /* ignore */
+        }
+        joiningRef.current = false;
+      }
+    })();
+  }, [user, refresh]);
 
   // socket + présence temps réel
   useEffect(() => {

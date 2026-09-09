@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth.jsx';
 import { useApi } from '../lib/useApi.js';
-import { put } from '../api.js';
+import { put, post } from '../api.js';
 import { Avatar, Btn, Card, Icon, SubjectChip, useToast } from '../components/ui.jsx';
 import { getPushState, enablePush, disablePush, sendTestPush } from '../lib/push.js';
 
@@ -94,6 +94,31 @@ export default function Profile() {
     );
   }
 
+  function copyInviteLink() {
+    const link = `${window.location.origin}/join?code=${group.code}`;
+    navigator.clipboard?.writeText(link).then(
+      () => toast("Lien d'invitation copié", 'success'),
+      () => toast('Copie impossible', 'error'),
+    );
+  }
+
+  async function leaveGroup(g) {
+    if (!window.confirm(`Quitter la tablée « ${g.name} » ?`)) return;
+    setBusy(true);
+    try {
+      await post(`/groups/${g.id}/leave`);
+      const rest = await refresh();
+      const next = (rest?.groups || []).filter((x) => x.id !== g.id);
+      if (next.length) selectGroup(next[0].id);
+      navigate(next.length ? '/' : '/join');
+      toast(`Tu as quitté « ${g.name} »`, 'success');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-space-md py-space-sm">
       <Card className="p-space-md flex items-center gap-3">
@@ -141,35 +166,62 @@ export default function Profile() {
               <p className="text-caption text-on-surface-variant">Code d'accès de la tablée</p>
               <p className="text-headline-sm font-bold tracking-widest text-primary">{group?.code}</p>
             </div>
-            <Btn variant="ghost" icon="content_copy" onClick={copyCode}>Copier</Btn>
+            <Btn variant="ghost" icon="content_copy" onClick={copyCode}>Code</Btn>
           </div>
-          <p className="text-caption text-secondary flex items-center gap-1 p-space-xs pt-3">
+          <div className="p-space-xs">
+            <Btn variant="ghost" icon="link" onClick={copyInviteLink} className="w-full">
+              Copier le lien d'invitation
+            </Btn>
+            <p className="text-caption text-on-surface-variant mt-1.5">
+              Envoie ce lien : la personne clique, se connecte, et entre direct dans la tablée — sans code à taper.
+            </p>
+          </div>
+          <p className="text-caption text-secondary flex items-center gap-1 p-space-xs pt-2">
             <Icon name="lock" size={13} /> Espace verrouillé à 4 étudiant·es max pour préserver l'intimité d'apprentissage.
           </p>
+          {group && groups.length <= 1 && (
+            <button
+              onClick={() => leaveGroup(group)}
+              disabled={busy}
+              className="text-caption text-error font-semibold self-start p-space-xs pt-1 disabled:opacity-50"
+            >
+              Quitter cette tablée
+            </button>
+          )}
         </Card>
 
         {groups.length > 1 && (
           <Card className="p-space-sm mt-space-sm flex flex-col gap-1.5">
-            <p className="text-caption font-semibold text-on-surface-variant px-1">Basculer de tablée</p>
+            <p className="text-caption font-semibold text-on-surface-variant px-1">Mes tablées</p>
             {groups.map((g) => (
-              <button
+              <div
                 key={g.id}
-                onClick={() => {
-                  selectGroup(g.id);
-                  toast(`Tablée active : ${g.name}`, 'success');
-                  navigate('/');
-                }}
-                className={`flex items-center justify-between px-3 h-11 rounded-xl text-label-md font-semibold transition-colors ${
+                className={`flex items-center gap-1 pl-3 pr-1 h-11 rounded-xl text-label-md font-semibold ${
                   g.id === group?.id ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface'
                 }`}
               >
-                <span className="truncate">{g.name}</span>
-                {g.id === group?.id ? (
-                  <Icon name="check" size={16} />
-                ) : (
-                  <span className="text-caption opacity-70">{g.code}</span>
-                )}
-              </button>
+                <button
+                  onClick={() => {
+                    selectGroup(g.id);
+                    toast(`Tablée active : ${g.name}`, 'success');
+                    navigate('/');
+                  }}
+                  className="flex-1 flex items-center justify-between min-w-0 h-full"
+                >
+                  <span className="truncate">{g.name}</span>
+                  {g.id === group?.id && <Icon name="check" size={16} />}
+                </button>
+                <button
+                  onClick={() => leaveGroup(g)}
+                  disabled={busy}
+                  aria-label={`Quitter ${g.name}`}
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                    g.id === group?.id ? 'text-on-primary/80' : 'text-error'
+                  }`}
+                >
+                  <Icon name="logout" size={16} />
+                </button>
+              </div>
             ))}
           </Card>
         )}

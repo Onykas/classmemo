@@ -73,7 +73,7 @@ export default function Login() {
         <Field icon="lock" type="password" placeholder="Mot de passe" value={form.password} onChange={set('password')} required />
 
         <Btn type="submit" disabled={busy} className="mt-1 w-full">
-          {busy ? '…' : mode === 'login' ? 'Se connecter' : 'Créer ma tablée'}
+          {busy ? '…' : mode === 'login' ? 'Se connecter' : 'Créer mon compte'}
         </Btn>
       </form>
 

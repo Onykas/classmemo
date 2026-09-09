@@ -6,6 +6,20 @@ import App from './App.jsx';
 import { AuthProvider } from './auth.jsx';
 import { ToastProvider } from './components/ui.jsx';
 
+// Lien d'invitation : ?code=CLAS-XXXX -> on mémorise avant tout rendu (la
+// redirection éventuelle vers /login ne doit pas le perdre), puis on nettoie l'URL.
+try {
+  const u = new URL(window.location.href);
+  const c = u.searchParams.get('code');
+  if (c) {
+    localStorage.setItem('cm_invite', c.trim().toUpperCase());
+    u.searchParams.delete('code');
+    window.history.replaceState({}, '', u.pathname + u.search + u.hash);
+  }
+} catch {
+  /* ignore */
+}
+
 // Révèle les icônes Material Symbols une fois la police chargée (évite le
 // flash du texte de ligature « arrow_back », etc.).
 const revealIcons = () => document.documentElement.classList.add('ms-ready');

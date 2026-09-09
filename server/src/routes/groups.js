@@ -79,6 +79,39 @@ router.get('/:gid', memberGuard(), async (req, res) => {
   res.json(await serializeGroup(await db.get('SELECT * FROM groups WHERE id = ?', req.params.gid)));
 });
 
+// Quitter une tablée. Si plus personne ne reste, la tablée et son contenu
+// sont supprimés.
+router.post('/:gid/leave', memberGuard(), async (req, res) => {
+  const gid = req.params.gid;
+  await db.run('DELETE FROM group_members WHERE group_id = ? AND user_id = ?', gid, req.user.id);
+  const left = Number((await db.get('SELECT COUNT(*) n FROM group_members WHERE group_id = ?', gid)).n);
+
+  if (left === 0) {
+    await db.tx(async (q) => {
+      const { rows: courses } = await q('SELECT id FROM courses WHERE group_id = ?', gid);
+      for (const c of courses) {
+        await q('DELETE FROM course_pages WHERE course_id = ?', c.id);
+        await q('DELETE FROM flashcard_reviews WHERE flashcard_id IN (SELECT id FROM flashcards WHERE course_id = ?)', c.id);
+        await q('DELETE FROM quiz_questions WHERE quiz_id IN (SELECT id FROM quizzes WHERE course_id = ?)', c.id);
+        await q('DELETE FROM quiz_attempts WHERE quiz_id IN (SELECT id FROM quizzes WHERE course_id = ?)', c.id);
+        await q('DELETE FROM quizzes WHERE course_id = ?', c.id);
+        await q('DELETE FROM capsules WHERE course_id = ?', c.id);
+      }
+      await q('DELETE FROM flashcards WHERE group_id = ?', gid);
+      await q('DELETE FROM courses WHERE group_id = ?', gid);
+      await q('DELETE FROM subjects WHERE group_id = ?', gid);
+      await q('DELETE FROM chat_messages WHERE group_id = ?', gid);
+      await q('DELETE FROM chat_threads WHERE group_id = ?', gid);
+      await q('DELETE FROM calendar_events WHERE group_id = ?', gid);
+      await q('DELETE FROM notifications WHERE group_id = ?', gid);
+      await q('DELETE FROM groups WHERE id = ?', gid);
+    });
+  } else {
+    emitToGroup(gid, 'group:updated', { groupId: gid });
+  }
+  res.json({ ok: true, deleted: left === 0 });
+});
+
 router.post('/:gid/presence', memberGuard(), async (req, res) => {
   const { state = 'active', activity = null } = req.body || {};
   await db.run(
