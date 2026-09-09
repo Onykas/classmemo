@@ -20,6 +20,7 @@ import GroupChat from './screens/GroupChat.jsx';
 import NotificationsScreen from './screens/Notifications.jsx';
 import Profile from './screens/Profile.jsx';
 import CumulativeSummary from './screens/CumulativeSummary.jsx';
+import CoursePrint from './screens/CoursePrint.jsx';
 
 function Guard({ need = 'auth', children }) {
   const { user, group, loading } = useAuth();
@@ -41,6 +42,14 @@ export default function App() {
         element={
           <Guard>
             <JoinTable />
+          </Guard>
+        }
+      />
+      <Route
+        path="/courses/:id/print"
+        element={
+          <Guard need="group">
+            <CoursePrint />
           </Guard>
         }
       />

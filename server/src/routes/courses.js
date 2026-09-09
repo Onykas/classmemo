@@ -138,6 +138,43 @@ router.post('/courses/:id/sessions', courseGuard, async (req, res) => {
   res.json({ id: sid, courseId: req.course.id, date, label: label || sessionLabelFor(date) });
 });
 
+// Tout le contenu d'un cours pour l'export / impression PDF.
+router.get('/courses/:id/full', courseGuard, async (req, res) => {
+  const base = await serializeCourse(req.course);
+  const sessions = await db.all(
+    'SELECT * FROM course_sessions WHERE course_id = ? ORDER BY date ASC, created_at ASC',
+    req.course.id,
+  );
+  const withPages = [];
+  for (const s of sessions) {
+    const pages = await db.all(
+      'SELECT id, label, ocr_text, image_url FROM course_pages WHERE session_id = ? ORDER BY position ASC',
+      s.id,
+    );
+    const author = s.author_id ? await db.get('SELECT name FROM users WHERE id = ?', s.author_id) : null;
+    withPages.push({
+      id: s.id,
+      date: s.date,
+      label: s.label,
+      note: s.note,
+      author: author?.name || null,
+      pages: pages.map((p) => ({ id: p.id, label: p.label, ocrText: p.ocr_text, imageUrl: p.image_url })),
+    });
+  }
+  const flashcards = (
+    await db.all('SELECT front, back, tag FROM flashcards WHERE course_id = ? ORDER BY created_at ASC', req.course.id)
+  ).map((f) => ({ front: f.front, back: f.back, tag: f.tag }));
+  const cap = await db.get('SELECT * FROM capsules WHERE course_id = ?', req.course.id);
+  res.json({
+    ...base,
+    sessionsFull: withPages,
+    flashcards,
+    capsule: cap
+      ? { notion: cap.notion, title: cap.title, simpleTranslation: cap.simple_translation, body: cap.body }
+      : null,
+  });
+});
+
 router.get('/courses/:id/sessions', courseGuard, async (req, res) => {
   const rows = await db.all(
     `SELECT s.*, (SELECT COUNT(*) FROM course_pages p WHERE p.session_id = s.id) AS page_count
@@ -372,6 +409,12 @@ router.post('/courses/:id/publish', courseGuard, async (req, res) => {
 
   const subject = c.subject_id ? await db.get('SELECT * FROM subjects WHERE id = ?', c.subject_id) : null;
   const subjLabel = subject?.name || 'un cours';
+  const sessions = await db.all(
+    'SELECT date, label FROM course_sessions WHERE course_id = ? ORDER BY date DESC, created_at DESC',
+    c.id,
+  );
+  const isNewSession = sessions.length > 1;
+  const lastLabel = sessions[0]?.label || sessions[0]?.date || 'séance';
 
   let thread = await db.get("SELECT * FROM chat_threads WHERE group_id = ? AND kind = 'default'", c.group_id);
   if (!thread) {
@@ -383,7 +426,9 @@ router.post('/courses/:id/publish', courseGuard, async (req, res) => {
     );
     thread = { id: tid };
   }
-  const body = `${req.user.name} a déposé les notes : « ${c.title} »`;
+  const body = isNewSession
+    ? `${req.user.name} a ajouté une séance (${lastLabel}) à « ${c.title} »`
+    : `${req.user.name} a déposé les notes : « ${c.title} »`;
   const msgId = newId();
   await db.run(
     `INSERT INTO chat_messages (id, thread_id, group_id, user_id, kind, body, card_ref)
@@ -405,8 +450,10 @@ router.post('/courses/:id/publish', courseGuard, async (req, res) => {
 
   for (const m of await membersOfGroup(c.group_id)) {
     if (m.id === req.user.id) continue;
-    const title = `Notes de ${subjLabel} déposées`;
-    const bodyText = `${req.user.name} a partagé la transcription, ${c.reading_time || 5} min de lecture + flashcards.`;
+    const title = isNewSession ? `Nouvelle séance — ${c.title}` : `Notes de ${subjLabel} déposées`;
+    const bodyText = isNewSession
+      ? `${req.user.name} a ajouté ${lastLabel}. La fiche du cours est mise à jour.`
+      : `${req.user.name} a partagé la transcription, ${c.reading_time || 5} min de lecture + flashcards.`;
     const n = await notify(m.id, {
       groupId: c.group_id,
       kind: 'course',

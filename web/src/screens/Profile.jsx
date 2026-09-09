@@ -356,10 +356,18 @@ export default function Profile() {
       )}
 
       <button
-        onClick={() => toast('Export PDF bientôt disponible', 'info')}
-        className="w-full h-12 rounded-2xl bg-surface-container-lowest ring-1 ring-black/[0.04] shadow-card flex items-center justify-between px-4 text-label-md font-semibold"
+        onClick={() => navigate('/subjects')}
+        className="w-full rounded-2xl bg-surface-container-lowest ring-1 ring-black/[0.04] shadow-card flex items-center justify-between px-4 py-3 text-label-md font-semibold"
       >
-        <span className="flex items-center gap-2"><Icon name="picture_as_pdf" size={18} /> Exporter mes fiches révisées</span>
+        <span className="flex items-center gap-2 text-left">
+          <Icon name="picture_as_pdf" size={18} />
+          <span className="flex flex-col">
+            Exporter un cours en PDF
+            <span className="text-caption font-normal text-on-surface-variant">
+              Ouvre un cours → « Télécharger en PDF »
+            </span>
+          </span>
+        </span>
         <Icon name="chevron_right" size={18} className="text-on-surface-variant" />
       </button>
 

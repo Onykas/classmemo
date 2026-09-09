@@ -52,6 +52,20 @@ export default function CourseDetail() {
         </Section>
       )}
 
+      <button
+        onClick={() => navigate(`/courses/${id}/print`)}
+        className="bg-surface-container-low rounded-2xl p-space-sm flex items-center gap-space-sm text-left hover:bg-surface-container transition-colors"
+      >
+        <span className="w-12 h-12 rounded-xl bg-surface-container-highest flex items-center justify-center flex-shrink-0 text-primary">
+          <Icon name="picture_as_pdf" size={20} />
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-label-md text-on-surface">Télécharger en PDF</p>
+          <p className="text-caption text-on-surface-variant truncate">Séance, période ou cours complet · synthèse · flashcards</p>
+        </div>
+        <Icon name="arrow_forward" size={18} className="text-on-surface-variant" />
+      </button>
+
       {course.pages?.length > 0 && (
         <button
           onClick={() => navigate(`/courses/${id}/original`)}
