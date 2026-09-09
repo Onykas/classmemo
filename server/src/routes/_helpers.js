@@ -77,6 +77,21 @@ export async function serializeCourse(course, { withContent = true } = {}) {
   const flashcardCount = Number(
     (await db.get('SELECT COUNT(*) n FROM flashcards WHERE course_id = ?', course.id)).n,
   );
+  const sessions = (
+    await db.all(
+      `SELECT s.*, (SELECT COUNT(*) FROM course_pages p WHERE p.session_id = s.id) AS page_count
+         FROM course_sessions s WHERE s.course_id = ? ORDER BY s.date ASC, s.created_at ASC`,
+      course.id,
+    )
+  ).map((s) => ({
+    id: s.id,
+    date: s.date,
+    label: s.label,
+    note: s.note,
+    authorId: s.author_id,
+    pageCount: Number(s.page_count || 0),
+    createdAt: s.created_at,
+  }));
   const quiz = await db.get('SELECT * FROM quizzes WHERE course_id = ?', course.id);
   const quizCount = quiz
     ? Number((await db.get('SELECT COUNT(*) n FROM quiz_questions WHERE quiz_id = ?', quiz.id)).n)
@@ -87,10 +102,13 @@ export async function serializeCourse(course, { withContent = true } = {}) {
     id: course.id,
     groupId: course.group_id,
     title: course.title,
+    teacher: course.teacher || null,
     date: course.date,
     sessionLabel: course.session_label,
     location: course.location,
     status: course.status,
+    sessions,
+    sessionCount: sessions.length,
     analysisStep: course.analysis_step,
     generatedBy: course.generated_by,
     readingTime: course.reading_time,

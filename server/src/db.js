@@ -191,9 +191,21 @@ CREATE TABLE IF NOT EXISTS courses (
   published_at TIMESTAMPTZ
 );
 
+CREATE TABLE IF NOT EXISTS course_sessions (
+  id TEXT PRIMARY KEY,
+  course_id TEXT NOT NULL,
+  group_id TEXT NOT NULL,
+  date TEXT,
+  label TEXT,
+  note TEXT,
+  author_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS course_pages (
   id TEXT PRIMARY KEY,
   course_id TEXT NOT NULL,
+  session_id TEXT,
   position INTEGER DEFAULT 0,
   image_url TEXT,
   image_data TEXT,
@@ -342,12 +354,31 @@ CREATE INDEX IF NOT EXISTS idx_messages_thread ON chat_messages(thread_id);
 CREATE INDEX IF NOT EXISTS idx_notifs_user ON notifications(user_id, read);
 CREATE INDEX IF NOT EXISTS idx_events_group ON calendar_events(group_id, date);
 CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_course ON course_sessions(course_id, date);
 `;
 
 // Ajouts de colonnes sur des tables déjà créées (montée de version en douceur).
+// Exécutés APRÈS le SCHEMA, donc avant tout index qui dépend d'eux.
 const ALTERS = [
   `ALTER TABLE users ADD COLUMN IF NOT EXISTS reminder_last TEXT`,
+  `ALTER TABLE course_pages ADD COLUMN IF NOT EXISTS session_id TEXT`,
+  `ALTER TABLE courses ADD COLUMN IF NOT EXISTS teacher TEXT`,
+  `CREATE INDEX IF NOT EXISTS idx_pages_session ON course_pages(session_id)`,
 ];
+
+// Rattrapage : chaque cours existant devient un cours à 1 séance.
+const BACKFILL = `
+INSERT INTO course_sessions (id, course_id, group_id, date, label, note, author_id, created_at)
+SELECT 'sess_' || c.id, c.id, c.group_id, c.date,
+       COALESCE(c.session_label, 'Séance 1'), c.note, c.author_id, c.created_at
+  FROM courses c
+ WHERE NOT EXISTS (SELECT 1 FROM course_sessions s WHERE s.course_id = c.id);
+
+UPDATE course_pages p
+   SET session_id = (SELECT s.id FROM course_sessions s WHERE s.course_id = p.course_id
+                     ORDER BY s.created_at ASC LIMIT 1)
+ WHERE p.session_id IS NULL;
+`;
 
 export async function migrate() {
   await db.exec(SCHEMA);
@@ -357,6 +388,11 @@ export async function migrate() {
     } catch (err) {
       console.warn('[migrate] alter ignoré :', err.message);
     }
+  }
+  try {
+    await db.exec(BACKFILL);
+  } catch (err) {
+    console.warn('[migrate] backfill séances ignoré :', err.message);
   }
 }
 

@@ -17,10 +17,14 @@ export default function AddNotes() {
 
   const [subjects, setSubjects] = useState(null);
   const [subjectId, setSubjectId] = useState(null);
+  const [courses, setCourses] = useState([]);
+  const [mode, setMode] = useState('existing'); // 'existing' = séance d'un cours en cours, 'new' = nouveau cours
+  const [courseId, setCourseId] = useState(null);
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
   const [location, setLocation] = useState('');
   const [title, setTitle] = useState('');
+  const [teacher, setTeacher] = useState('');
   const [note, setNote] = useState('');
   const [addNote, setAddNote] = useState(true);
   const [pages, setPages] = useState([]);
@@ -31,10 +35,16 @@ export default function AddNotes() {
       setSubjects(s);
       setSubjectId(s[0]?.id || null);
     });
+    get(`/groups/${group.id}/courses?status=all&limit=100`).then((list) => {
+      setCourses(list);
+      setCourseId(list[0]?.id || null);
+      setMode(list.length ? 'existing' : 'new');
+    });
   }, [group.id]);
 
   if (!subjects) return <ScreenLoader />;
   const subject = subjects.find((s) => s.id === subjectId);
+  const existingCourse = courses.find((c) => c.id === courseId) || null;
 
   async function addSubject() {
     const name = window.prompt('Nom de la matière (ex. Anatomie, Droit civil…) :');
@@ -81,8 +91,9 @@ export default function AddNotes() {
     setPages((p) => p.map((x) => (x.localId === localId ? { ...x, ...patch } : x)));
   const removePage = (localId) => setPages((p) => p.filter((x) => x.localId !== localId));
 
+  const targetOk = mode === 'new' ? !!subjectId : !!courseId;
   const canSubmit =
-    subjectId &&
+    targetOk &&
     pages.length > 0 &&
     pages.every((p) => p.status !== 'ocr') &&
     pages.every((p) => p.file || (p.ocrText || '').trim()) &&
@@ -91,24 +102,35 @@ export default function AddNotes() {
   async function submit() {
     setSubmitting(true);
     try {
-      const course = await post('/courses', {
-        groupId: group.id,
-        subjectId,
-        title: title.trim() || `${subject?.name || 'Cours'} — ${formatDate(date)}`,
-        date,
-        sessionLabel: 'Notes manuscrites',
-        location: location.trim() || null,
-      });
+      let cid;
+      let sessionId;
+      if (mode === 'new') {
+        const course = await post('/courses', {
+          groupId: group.id,
+          subjectId,
+          title: title.trim() || `${subject?.name || 'Cours'} — ${formatDate(date)}`,
+          teacher: teacher.trim() || null,
+          date,
+          location: location.trim() || null,
+        });
+        cid = course.id;
+        sessionId = course.currentSessionId;
+      } else {
+        cid = courseId;
+        const s = await post(`/courses/${cid}/sessions`, { date, note: addNote ? note.trim() || null : null });
+        sessionId = s.id;
+      }
       for (const p of pages) {
         const fd = new FormData();
         if (p.file) fd.append('image', p.file, p.file.name);
+        if (sessionId) fd.append('sessionId', sessionId);
         fd.append('label', p.label);
         fd.append('ocrText', p.ocrText || '');
         fd.append('quality', p.file ? (p.status === 'done' ? 'Net' : 'À vérifier') : 'Saisi');
-        await upload(`/courses/${course.id}/pages`, fd);
+        await upload(`/courses/${cid}/pages`, fd);
       }
-      await post(`/courses/${course.id}/analyze`, { note: addNote ? note.trim() || null : null });
-      navigate(`/courses/${course.id}/analyzing`, { replace: true });
+      await post(`/courses/${cid}/analyze`, { note: addNote ? note.trim() || null : null });
+      navigate(`/courses/${cid}/analyzing`, { replace: true });
     } catch (err) {
       toast(err.message, 'error');
       setSubmitting(false);
@@ -138,58 +160,120 @@ export default function AddNotes() {
         </div>
       </div>
 
-      <Field label="Matière du cours">
-        <div className="flex gap-2 flex-wrap items-center">
-          {subjects.map((s) => (
+      {courses.length > 0 && (
+        <div className="flex bg-surface-container rounded-xl p-1 text-label-md font-semibold">
+          {[
+            ['existing', 'Séance d’un cours'],
+            ['new', 'Nouveau cours'],
+          ].map(([m, label]) => (
             <button
-              key={s.id}
-              onClick={() => setSubjectId(s.id)}
-              className={`transition-all ${subjectId === s.id ? '' : 'opacity-55'}`}
+              key={m}
+              onClick={() => setMode(m)}
+              className={`flex-1 h-9 rounded-lg transition-colors ${
+                mode === m ? 'bg-primary text-on-primary' : 'text-on-surface-variant'
+              }`}
             >
-              <SubjectChip colorKey={s.colorKey} label={s.name} />
+              {label}
             </button>
           ))}
-          <button
-            onClick={addSubject}
-            className="h-8 px-3 rounded-full bg-surface-container-high text-primary text-label-md font-semibold flex items-center gap-1"
-          >
-            <Icon name="add" size={16} /> Matière
-          </button>
         </div>
-        {subjects.length === 0 && (
-          <p className="text-caption text-on-surface-variant mt-1">
-            Ajoute une matière pour classer ce cours.
-          </p>
-        )}
-      </Field>
+      )}
 
-      <div className="grid grid-cols-2 gap-space-sm">
-        <Field label="Date de la séance">
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="h-12 px-3 rounded-xl bg-surface-container-lowest ring-1 ring-black/[0.08] outline-none focus:ring-2 focus:ring-primary text-body-md w-full"
-          />
-        </Field>
-        <Field label="Lieu (facultatif)">
-          <input
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            placeholder="Amphi B…"
-            className="h-12 px-3 rounded-xl bg-surface-container-lowest ring-1 ring-black/[0.08] outline-none focus:ring-2 focus:ring-primary text-body-md w-full"
-          />
-        </Field>
-      </div>
+      {mode === 'existing' ? (
+        <>
+          <Field label="Ajouter la séance au cours">
+            <div className="flex flex-col gap-1.5">
+              {courses.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => setCourseId(c.id)}
+                  className={`flex items-center justify-between px-3 h-12 rounded-xl text-left transition-colors ${
+                    courseId === c.id ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface'
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-label-md font-semibold">{c.title}</span>
+                    <span className={`block text-caption ${courseId === c.id ? 'text-on-primary/80' : 'text-on-surface-variant'}`}>
+                      {c.teacher ? c.teacher + ' · ' : ''}{c.sessionCount || 0} séance·s
+                    </span>
+                  </span>
+                  {courseId === c.id && <Icon name="check" size={16} />}
+                </button>
+              ))}
+            </div>
+          </Field>
+          <Field label="Date de la séance">
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="h-12 px-3 rounded-xl bg-surface-container-lowest ring-1 ring-black/[0.08] outline-none focus:ring-2 focus:ring-primary text-body-md w-full"
+            />
+          </Field>
+        </>
+      ) : (
+        <>
+          <Field label="Matière du cours">
+            <div className="flex gap-2 flex-wrap items-center">
+              {subjects.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setSubjectId(s.id)}
+                  className={`transition-all ${subjectId === s.id ? '' : 'opacity-55'}`}
+                >
+                  <SubjectChip colorKey={s.colorKey} label={s.name} />
+                </button>
+              ))}
+              <button
+                onClick={addSubject}
+                className="h-8 px-3 rounded-full bg-surface-container-high text-primary text-label-md font-semibold flex items-center gap-1"
+              >
+                <Icon name="add" size={16} /> Matière
+              </button>
+            </div>
+            {subjects.length === 0 && (
+              <p className="text-caption text-on-surface-variant mt-1">Ajoute une matière pour classer ce cours.</p>
+            )}
+          </Field>
 
-      <Field label="Titre du cours (facultatif)">
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder={`${subject?.name || 'Cours'} — ${formatDate(date)}`}
-          className="h-12 px-3 rounded-xl bg-surface-container-lowest ring-1 ring-black/[0.08] outline-none focus:ring-2 focus:ring-primary text-body-md w-full"
-        />
-      </Field>
+          <Field label="Titre du cours">
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Conception PSM…"
+              className="h-12 px-3 rounded-xl bg-surface-container-lowest ring-1 ring-black/[0.08] outline-none focus:ring-2 focus:ring-primary text-body-md w-full"
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-space-sm">
+            <Field label="Enseignant·e (facultatif)">
+              <input
+                value={teacher}
+                onChange={(e) => setTeacher(e.target.value)}
+                placeholder="M. Tajariol"
+                className="h-12 px-3 rounded-xl bg-surface-container-lowest ring-1 ring-black/[0.08] outline-none focus:ring-2 focus:ring-primary text-body-md w-full"
+              />
+            </Field>
+            <Field label="Date de la séance">
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="h-12 px-3 rounded-xl bg-surface-container-lowest ring-1 ring-black/[0.08] outline-none focus:ring-2 focus:ring-primary text-body-md w-full"
+              />
+            </Field>
+          </div>
+
+          <Field label="Lieu (facultatif)">
+            <input
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="Amphi B…"
+              className="h-12 px-3 rounded-xl bg-surface-container-lowest ring-1 ring-black/[0.08] outline-none focus:ring-2 focus:ring-primary text-body-md w-full"
+            />
+          </Field>
+        </>
+      )}
 
       <Field label="Notes du cours" hint={pages.length ? `${pages.length} bloc·s` : 'OCR local (français)'}>
         <div className="bg-surface-container-low rounded-2xl p-space-md flex flex-col items-center text-center gap-2">
@@ -276,10 +360,17 @@ export default function AddNotes() {
       </Card>
 
       <Btn onClick={submit} disabled={!canSubmit} iconRight="arrow_forward" className="w-full">
-        {submitting ? 'Envoi…' : "Lancer l'analyse intelligente"}
+        {submitting
+          ? 'Envoi…'
+          : mode === 'existing'
+            ? 'Ajouter la séance & mettre à jour la fiche'
+            : "Créer le cours & lancer l'analyse"}
       </Btn>
-      <p className="text-caption text-on-surface-variant flex items-center gap-1 justify-center">
-        <Icon name="bolt" size={13} /> Génération automatique : résumé, flashcards & quiz interactif
+      <p className="text-caption text-on-surface-variant flex items-center gap-1 justify-center text-center">
+        <Icon name="bolt" size={13} />
+        {mode === 'existing'
+          ? "L'IA régénère résumé, flashcards & quiz sur toutes les séances"
+          : 'Génération automatique : résumé, flashcards & quiz interactif'}
       </p>
     </div>
   );

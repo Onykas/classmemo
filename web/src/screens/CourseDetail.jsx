@@ -22,11 +22,35 @@ export default function CourseDetail() {
           </span>
         </div>
         <h1 className="text-headline-lg-mobile font-bold text-primary">{course.title}</h1>
+        {course.teacher && (
+          <p className="text-body-sm text-on-surface-variant flex items-center gap-1">
+            <Icon name="person" size={14} /> {course.teacher}
+          </p>
+        )}
         <p className="text-caption text-on-surface-variant flex items-center gap-1">
           <Icon name="verified" size={14} className="text-primary" />
-          Notes rédigées par {course.author?.name?.split(' ')[0] || '—'} • {course.generatedBy === 'claude' ? 'Structurées par Claude' : 'Structure auto'}
+          {course.sessionCount || 1} séance·s • {course.generatedBy === 'claude' ? 'Synthèse par Claude' : 'Synthèse auto'}
         </p>
       </Card>
+
+      {course.sessions?.length > 0 && (
+        <Section icon="event_note" title="Séances du cours">
+          <Card className="p-space-sm flex flex-col divide-y divide-surface-container">
+            {course.sessions.map((s) => (
+              <div key={s.id} className="flex items-center gap-2.5 p-space-xs">
+                <span className="w-8 h-8 rounded-lg bg-primary-fixed text-primary flex items-center justify-center flex-shrink-0">
+                  <Icon name="calendar_today" size={15} />
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-label-md text-on-surface">{s.date ? formatDayDate(s.date) : s.label}</p>
+                  {s.note && <p className="text-caption text-on-surface-variant truncate">{s.note}</p>}
+                </div>
+                <span className="text-caption text-on-surface-variant flex-shrink-0">{s.pageCount} bloc·s</span>
+              </div>
+            ))}
+          </Card>
+        </Section>
+      )}
 
       {course.pages?.length > 0 && (
         <button
