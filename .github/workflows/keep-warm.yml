@@ -1,0 +1,29 @@
+# Garde le service Render « éveillé » aux heures de révision.
+# Render (plan free) endort le serveur après 15 min sans visite ; ce job
+# le ping toutes les ~12 min entre 5 h et 22 h UTC (6 h–23 h à Kinshasa),
+# donc la 1re personne qui ouvre l'app ne subit pas le réveil à froid.
+#
+# La nuit, on laisse dormir : ça économise les heures gratuites Render
+# (750 h/mois, partagées avec tes autres services free).
+name: keep-warm
+
+on:
+  schedule:
+    - cron: "*/12 5-21 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping /api/health
+        run: |
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 \
+              https://classmemo.onrender.com/api/health) && \
+              [ "$code" = "200" ] && echo "OK ($code)" && exit 0
+            echo "tentative $i : HTTP $code — nouvel essai dans 20 s"
+            sleep 20
+          done
+          echo "le service n'a pas répondu 200" && exit 1
