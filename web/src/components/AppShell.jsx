@@ -4,6 +4,7 @@ import { useAuth } from '../auth.jsx';
 import { get } from '../api.js';
 import { Avatar, AvatarStack, Icon } from './ui.jsx';
 import BottomNav from './BottomNav.jsx';
+import InstallPrompt from './InstallPrompt.jsx';
 
 export default function AppShell() {
   const { user, group, members, socket } = useAuth();
@@ -68,6 +69,7 @@ export default function AppShell() {
       </header>
 
       <main className="max-w-app mx-auto px-space-md pt-[4.5rem] pb-safe-bottom-nav min-h-full">
+        <InstallPrompt />
         <Outlet context={{ reloadBadges: loadBadges }} />
       </main>
 
