@@ -36,6 +36,26 @@ export default function AddNotes() {
   if (!subjects) return <ScreenLoader />;
   const subject = subjects.find((s) => s.id === subjectId);
 
+  async function addSubject() {
+    const name = window.prompt('Nom de la matière (ex. Anatomie, Droit civil…) :');
+    if (!name?.trim()) return;
+    try {
+      const s = await post(`/groups/${group.id}/subjects`, { name: name.trim() });
+      setSubjects((list) => [...list, s]);
+      setSubjectId(s.id);
+    } catch (e) {
+      toast(e.message, 'error');
+    }
+  }
+
+  function addTextPage() {
+    const localId = `t${++localSeq}`;
+    setPages((p) => [
+      ...p,
+      { localId, file: null, previewUrl: null, ocrText: '', progress: 1, status: 'text', label: `Texte ${p.filter((x) => !x.file).length + 1}` },
+    ]);
+  }
+
   async function onFiles(e) {
     const files = [...(e.target.files || [])];
     e.target.value = '';
@@ -62,7 +82,11 @@ export default function AddNotes() {
   const removePage = (localId) => setPages((p) => p.filter((x) => x.localId !== localId));
 
   const canSubmit =
-    subjectId && pages.length > 0 && pages.every((p) => p.status !== 'ocr') && !submitting;
+    subjectId &&
+    pages.length > 0 &&
+    pages.every((p) => p.status !== 'ocr') &&
+    pages.every((p) => p.file || (p.ocrText || '').trim()) &&
+    !submitting;
 
   async function submit() {
     setSubmitting(true);
@@ -77,10 +101,10 @@ export default function AddNotes() {
       });
       for (const p of pages) {
         const fd = new FormData();
-        fd.append('image', p.file, p.file.name);
+        if (p.file) fd.append('image', p.file, p.file.name);
         fd.append('label', p.label);
         fd.append('ocrText', p.ocrText || '');
-        fd.append('quality', p.status === 'done' ? 'Net' : 'À vérifier');
+        fd.append('quality', p.file ? (p.status === 'done' ? 'Net' : 'À vérifier') : 'Saisi');
         await upload(`/courses/${course.id}/pages`, fd);
       }
       await post(`/courses/${course.id}/analyze`, { note: addNote ? note.trim() || null : null });
@@ -115,7 +139,7 @@ export default function AddNotes() {
       </div>
 
       <Field label="Matière du cours">
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
           {subjects.map((s) => (
             <button
               key={s.id}
@@ -125,7 +149,18 @@ export default function AddNotes() {
               <SubjectChip colorKey={s.colorKey} label={s.name} />
             </button>
           ))}
+          <button
+            onClick={addSubject}
+            className="h-8 px-3 rounded-full bg-surface-container-high text-primary text-label-md font-semibold flex items-center gap-1"
+          >
+            <Icon name="add" size={16} /> Matière
+          </button>
         </div>
+        {subjects.length === 0 && (
+          <p className="text-caption text-on-surface-variant mt-1">
+            Ajoute une matière pour classer ce cours.
+          </p>
+        )}
       </Field>
 
       <div className="grid grid-cols-2 gap-space-sm">
@@ -156,28 +191,35 @@ export default function AddNotes() {
         />
       </Field>
 
-      <Field label="Photos des notes manuscrites" hint={pages.length ? `${pages.length} page·s` : 'OCR local (français)'}>
+      <Field label="Notes du cours" hint={pages.length ? `${pages.length} bloc·s` : 'OCR local (français)'}>
         <div className="bg-surface-container-low rounded-2xl p-space-md flex flex-col items-center text-center gap-2">
           <span className="w-12 h-12 rounded-full bg-surface-container-highest text-primary flex items-center justify-center">
             <Icon name="document_scanner" size={24} />
           </span>
-          <p className="text-label-md font-semibold text-on-surface">Ajoute tes feuillets de cours</p>
-          <p className="text-caption text-on-surface-variant max-w-[16rem]">
-            Prends une vue bien à plat. L'OCR de ClassMemo transcrit le texte automatiquement dans ton navigateur.
+          <p className="text-label-md font-semibold text-on-surface">Ajoute le contenu du cours</p>
+          <p className="text-caption text-on-surface-variant max-w-[17rem]">
+            Photo de tes feuillets (transcription automatique) ou saisie du texte à la main. Tu peux combiner plusieurs blocs.
           </p>
-          <div className="flex gap-2 mt-1">
-            <Btn icon="photo_camera" onClick={() => fileRef.current?.click()}>Prendre / choisir</Btn>
+          <div className="flex gap-2 mt-1 flex-wrap justify-center">
+            <Btn icon="add_a_photo" onClick={() => fileRef.current?.click()}>Photo</Btn>
+            <Btn variant="ghost" icon="keyboard" onClick={addTextPage}>Écrire le texte</Btn>
           </div>
-          <input ref={fileRef} type="file" accept="image/*" capture="environment" multiple hidden onChange={onFiles} />
+          <input ref={fileRef} type="file" accept="image/*" multiple hidden onChange={onFiles} />
         </div>
       </Field>
 
       {pages.length > 0 && (
         <div className="flex flex-col gap-space-sm">
-          {pages.map((p, i) => (
+          {pages.map((p) => (
             <Card key={p.localId} className="p-space-sm">
               <div className="flex gap-3">
-                <img src={p.previewUrl} alt="" className="w-20 h-20 rounded-xl object-cover bg-surface-container flex-shrink-0" />
+                {p.previewUrl ? (
+                  <img src={p.previewUrl} alt="" className="w-20 h-20 rounded-xl object-cover bg-surface-container flex-shrink-0" />
+                ) : (
+                  <span className="w-20 h-20 rounded-xl bg-surface-container flex items-center justify-center flex-shrink-0 text-primary">
+                    <Icon name="keyboard" size={24} />
+                  </span>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <input
@@ -192,9 +234,11 @@ export default function AddNotes() {
                   <p className="text-caption text-on-surface-variant mt-0.5">
                     {p.status === 'ocr'
                       ? `Transcription… ${Math.round((p.progress || 0) * 100)}%`
-                      : p.status === 'empty'
-                        ? 'Aucun texte détecté — saisis-le à la main'
-                        : 'Texte transcrit ✓'}
+                      : p.status === 'text'
+                        ? 'Texte saisi à la main'
+                        : p.status === 'empty'
+                          ? 'Aucun texte détecté — saisis-le à la main'
+                          : 'Texte transcrit ✓'}
                   </p>
                   {p.status === 'ocr' && (
                     <div className="h-1 bg-surface-container rounded-full mt-1 overflow-hidden">
@@ -206,8 +250,8 @@ export default function AddNotes() {
               <textarea
                 value={p.ocrText}
                 onChange={(e) => setPage(p.localId, { ocrText: e.target.value })}
-                rows={4}
-                placeholder="Transcription de la page…"
+                rows={p.file ? 4 : 6}
+                placeholder={p.file ? 'Transcription de la page…' : 'Écris ou colle le contenu du cours ici…'}
                 className="w-full mt-2 p-2 rounded-xl bg-surface-container-low text-body-sm outline-none focus:ring-2 focus:ring-primary resize-y"
               />
             </Card>

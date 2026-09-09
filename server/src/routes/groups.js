@@ -53,6 +53,14 @@ router.post('/', async (req, res) => {
     newId(),
     id,
   );
+  // Matière par défaut pour que « Déposer des notes » soit utilisable d'emblée.
+  await db.run(
+    'INSERT INTO subjects (id, group_id, name, color_key) VALUES (?, ?, ?, ?)',
+    newId(),
+    id,
+    (subjectLabel && String(subjectLabel).trim()) || 'Cours',
+    'psm',
+  );
 
   res.json(await serializeGroup(await db.get('SELECT * FROM groups WHERE id = ?', id)));
 });
