@@ -1,7 +1,7 @@
 # Garde le service Render « éveillé » aux heures de révision.
 # Render (plan free) endort le serveur après 15 min sans visite ; ce job
-# le ping toutes les ~12 min entre 5 h et 22 h UTC (6 h–23 h à Kinshasa),
-# donc la 1re personne qui ouvre l'app ne subit pas le réveil à froid.
+# le ping toutes les ~12 min entre 5 h et 22 h UTC, soit ~6 h–24 h en
+# France, donc la 1re personne qui ouvre l'app ne subit pas le réveil à froid.
 #
 # La nuit, on laisse dormir : ça économise les heures gratuites Render
 # (750 h/mois, partagées avec tes autres services free).
@@ -9,7 +9,7 @@ name: keep-warm
 
 on:
   schedule:
-    - cron: "*/12 5-21 * * *"
+    - cron: "*/12 5-22 * * *"
   workflow_dispatch: {}
 
 jobs:

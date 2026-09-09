@@ -47,7 +47,7 @@ gh repo create classmemo --private --source=. --remote=origin --push
 > Plan gratuit Render : le serveur s'endort après 15 min sans visite et met
 > ~30–50 s à se réveiller à la visite suivante. Les données, elles, restent
 > chez Neon en permanence. Le workflow GitHub `.github/workflows/keep-warm.yml`
-> le maintient éveillé de 6 h à 23 h (heure de Kinshasa).
+> le maintient éveillé de 6 h à 23 h (heure de France).
 
 ## Notifications push (rappels de révision)
 
@@ -62,7 +62,7 @@ rappel sur le téléphone.
    - `VAPID_PUBLIC_KEY` = la valeur affichée
    - `VAPID_PRIVATE_KEY` = la valeur affichée
    - `VAPID_SUBJECT` = `mailto:ton-email` (facultatif)
-   - `REMINDER_TZ` = `Africa/Kinshasa` (déjà la valeur par défaut)
+   - `REMINDER_TZ` = `Europe/Paris` (déjà la valeur par défaut)
 3. **Save Changes** → Render redéploie. Chacun active ensuite les rappels
    dans **Profil → Réglages pédagogiques → Notifications sur cet appareil**.
 

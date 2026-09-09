@@ -25,8 +25,8 @@ export const DEFAULT_ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || '';
 export const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
 export const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
 export const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:contact@classmemo.app';
-// Fuseau horaire de référence pour l'heure des rappels (par défaut : Kinshasa).
-export const REMINDER_TZ = process.env.REMINDER_TZ || 'Africa/Kinshasa';
+// Fuseau horaire de référence pour l'heure des rappels (par défaut : France).
+export const REMINDER_TZ = process.env.REMINDER_TZ || 'Europe/Paris';
 
 // PostgreSQL en prod (Neon/Render). Absent en local -> PGlite (fichier server/pgdata).
 export const DATABASE_URL = process.env.DATABASE_URL || '';

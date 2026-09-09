@@ -70,7 +70,7 @@ Le modèle utilisé se choisit dans le profil (`claude-opus-5` par défaut, `cla
 Générer les clés : `npm -w server run vapid`, puis les mettre dans `server/.env`
 (local) et dans l'environnement Render (prod) : `VAPID_PUBLIC_KEY`,
 `VAPID_PRIVATE_KEY`, éventuellement `VAPID_SUBJECT` et `REMINDER_TZ`
-(par défaut `Africa/Kinshasa`). Sans ces clés, l'app fonctionne à l'identique
+(par défaut `Europe/Paris`). Sans ces clés, l'app fonctionne à l'identique
 mais sans rappels push. Un minuteur serveur envoie les rappels aux créneaux
 7 h–9 h et 18 h–20 h ; chaque personne choisit `1/jour` ou `2/jour` dans son profil.
 

@@ -23,4 +23,4 @@ services:
       - key: VAPID_PRIVATE_KEY
         sync: false # facultatif : idem
       - key: REMINDER_TZ
-        value: Africa/Kinshasa
+        value: Europe/Paris
