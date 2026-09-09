@@ -13,30 +13,37 @@ export default function JoinTable() {
   const [subject, setSubject] = useState('');
   const [busy, setBusy] = useState(false);
 
+  async function enterGroup(g) {
+    selectGroup(g.id);
+    try {
+      await refresh();
+      navigate('/', { replace: true });
+    } catch {
+      // dernier recours : rechargement complet, la session repart du token
+      window.location.assign('/');
+    }
+  }
+
   async function join() {
+    if (busy) return;
     setBusy(true);
     try {
       const g = await post('/groups/join', { code: code.trim() });
-      await refresh();
-      selectGroup(g.id);
-      navigate('/', { replace: true });
+      await enterGroup(g);
     } catch (err) {
-      toast(err.message, 'error');
-    } finally {
+      toast(err.message || 'Impossible de rejoindre la tablée', 'error');
       setBusy(false);
     }
   }
 
   async function create() {
+    if (busy) return;
     setBusy(true);
     try {
       const g = await post('/groups', { name: newName.trim(), subjectLabel: subject.trim() || null });
-      await refresh();
-      selectGroup(g.id);
-      navigate('/', { replace: true });
+      await enterGroup(g);
     } catch (err) {
-      toast(err.message, 'error');
-    } finally {
+      toast(err.message || 'Impossible de créer la tablée', 'error');
       setBusy(false);
     }
   }

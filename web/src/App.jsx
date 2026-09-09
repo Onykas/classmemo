@@ -26,6 +26,7 @@ function Guard({ need = 'auth', children }) {
   if (loading) return <ScreenLoader />;
   if (!user) return <Navigate to="/login" replace />;
   if (need === 'group' && !group) return <Navigate to="/join" replace />;
+  if (need === 'nogroup' && group) return <Navigate to="/" replace />;
   return children;
 }
 
@@ -38,7 +39,7 @@ export default function App() {
       <Route
         path="/join"
         element={
-          <Guard>
+          <Guard need="nogroup">
             <JoinTable />
           </Guard>
         }
