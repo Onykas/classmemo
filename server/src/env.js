@@ -19,6 +19,15 @@ export const PORT = Number(process.env.PORT || 4000);
 export const JWT_SECRET = process.env.JWT_SECRET || 'classmemo-dev-secret-change-me';
 export const DEFAULT_ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || '';
 
+// Notifications push (Web Push / VAPID). Générer une paire : `npm -w server run vapid`,
+// puis renseigner VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY (et VAPID_SUBJECT) dans l'env.
+// Absentes -> les rappels push sont simplement désactivés.
+export const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
+export const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
+export const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:contact@classmemo.app';
+// Fuseau horaire de référence pour l'heure des rappels (par défaut : Kinshasa).
+export const REMINDER_TZ = process.env.REMINDER_TZ || 'Africa/Kinshasa';
+
 // PostgreSQL en prod (Neon/Render). Absent en local -> PGlite (fichier server/pgdata).
 export const DATABASE_URL = process.env.DATABASE_URL || '';
 

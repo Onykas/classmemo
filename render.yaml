@@ -18,3 +18,9 @@ services:
         sync: false # à coller : chaîne de connexion Neon (postgresql://…)
       - key: ANTHROPIC_API_KEY
         sync: false # facultatif : sinon génération heuristique locale
+      - key: VAPID_PUBLIC_KEY
+        sync: false # facultatif : `npm -w server run vapid` (rappels push)
+      - key: VAPID_PRIVATE_KEY
+        sync: false # facultatif : idem
+      - key: REMINDER_TZ
+        value: Africa/Kinshasa

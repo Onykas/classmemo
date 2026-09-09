@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../auth.jsx';
 import { useApi } from '../lib/useApi.js';
 import { put } from '../api.js';
 import { Avatar, Btn, Card, Icon, SubjectChip, useToast } from '../components/ui.jsx';
+import { getPushState, enablePush, disablePush, sendTestPush } from '../lib/push.js';
 
 const MODELS = [
   { id: 'claude-opus-5', label: 'Claude Opus 5', hint: 'Le plus fin' },
@@ -21,6 +22,38 @@ export default function Profile() {
   const subjects = useApi(group ? `/groups/${group.id}/subjects` : null, [group?.id]);
   const [keyInput, setKeyInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [push, setPush] = useState({ supported: true, subscribed: false, permission: 'default' });
+  const [pushBusy, setPushBusy] = useState(false);
+
+  useEffect(() => {
+    getPushState().then(setPush).catch(() => {});
+  }, []);
+
+  async function togglePush(next) {
+    setPushBusy(true);
+    try {
+      const r = next ? await enablePush() : await disablePush();
+      setPush((p) => ({ ...p, subscribed: r.subscribed, permission: 'granted' }));
+      toast(next ? 'Notifications activées sur cet appareil' : 'Notifications désactivées', 'success');
+    } catch (e) {
+      toast(e.message, 'error');
+      setPush(await getPushState());
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
+  async function testPush() {
+    setPushBusy(true);
+    try {
+      const r = await sendTestPush();
+      toast(r.sent ? 'Notification de test envoyée' : 'Aucun appareil abonné', r.sent ? 'success' : 'info');
+    } catch (e) {
+      toast(e.message, 'error');
+    } finally {
+      setPushBusy(false);
+    }
+  }
 
   async function saveSettings(patch) {
     updateUser(patch);
@@ -150,6 +183,35 @@ export default function Profile() {
             on={user.srEnabled}
             onChange={(v) => saveSettings({ srEnabled: v })}
           />
+
+          <div>
+            <Toggle
+              icon="notifications_active"
+              title="Notifications sur cet appareil"
+              sub={
+                push.supported
+                  ? 'Rappels de révision aux heures choisies, même app fermée'
+                  : 'Non pris en charge par ce navigateur'
+              }
+              on={push.subscribed}
+              onChange={(v) => !pushBusy && push.supported && togglePush(v)}
+            />
+            {push.subscribed && (
+              <div className="flex items-center gap-2 mt-2 pl-12">
+                <Btn variant="ghost" onClick={testPush} disabled={pushBusy}>
+                  Envoyer un test
+                </Btn>
+                <span className="text-caption text-on-surface-variant">
+                  Créneaux : matin (7 h–9 h){user.eveningReminder || user.reminderFreq === '2/jour' ? ' et soir (18 h–20 h)' : ''}
+                </span>
+              </div>
+            )}
+            {push.supported && push.permission === 'denied' && !push.subscribed && (
+              <p className="text-caption text-error mt-1 pl-12">
+                Notifications bloquées : autorise-les dans les réglages du navigateur pour cet appareil.
+              </p>
+            )}
+          </div>
 
           <div>
             <p className="text-label-md font-semibold mb-1.5">Modèle de génération</p>

@@ -20,6 +20,8 @@ import chatRoutes from './routes/chat.js';
 import notificationRoutes from './routes/notifications.js';
 import meRoutes from './routes/me.js';
 import homeRoutes from './routes/home.js';
+import pushRoutes from './routes/push.js';
+import { initReminders } from './reminders.js';
 
 await migrate();
 
@@ -55,6 +57,7 @@ api.use('/', chatRoutes);
 api.use('/', notificationRoutes);
 api.use('/', meRoutes);
 api.use('/', homeRoutes);
+api.use('/', pushRoutes);
 app.use('/api', api);
 app.use('/api', (req, res) => res.status(404).json({ error: `Route inconnue : ${req.method} ${req.path}` }));
 
@@ -78,6 +81,7 @@ app.use((err, _req, res, _next) => {
 
 const server = http.createServer(app);
 initRealtime(server);
+initReminders();
 
 server.listen(PORT, () => {
   console.log(`ClassMemo API  →  http://localhost:${PORT}`);

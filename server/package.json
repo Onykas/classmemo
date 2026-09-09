@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "seed": "node src/seed.js"
+    "seed": "node src/seed.js",
+    "vapid": "node -e \"const k=require('web-push').generateVAPIDKeys();console.log('VAPID_PUBLIC_KEY='+k.publicKey);console.log('VAPID_PRIVATE_KEY='+k.privateKey)\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": ">=0.30.0",
@@ -20,6 +21,7 @@
     "multer": "^2.0.0",
     "nanoid": "^5.0.0",
     "pg": "^8.23.0",
-    "socket.io": "^4.7.0"
+    "socket.io": "^4.7.0",
+    "web-push": "^3.6.7"
   }
 }

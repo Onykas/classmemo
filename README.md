@@ -10,6 +10,7 @@ Chaîne complète et fonctionnelle :
 3. **Validation & publication** — relecture éditable puis partage au groupe (notification + message dans le salon).
 4. **Révision** — flashcards en répétition espacée **SM-2**, quiz noté.
 5. **Vie de groupe** — présence temps réel, chat multi-fils (Socket.IO), calendrier partagé avec attribution du scribe, écran « Qu'est-ce que j'ai raté », notifications.
+6. **Rappels push** — notifications système (Web Push / VAPID) matin et soir : une flashcard due ou une notion d'un cours récent. À activer par personne dans Profil → Réglages ; nécessite `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` (voir `DEPLOY.md`).
 
 ## Stack
 
@@ -63,6 +64,15 @@ Optionnelle. Deux façons de la fournir :
 Sans clé, l'analyse bascule automatiquement sur un générateur heuristique local (résumé, notions, flashcards et quiz extraits du texte OCR) : l'app reste 100 % fonctionnelle hors ligne.
 
 Le modèle utilisé se choisit dans le profil (`claude-opus-5` par défaut, `claude-sonnet-5`, `claude-haiku-4-5`).
+
+## Notifications push
+
+Générer les clés : `npm -w server run vapid`, puis les mettre dans `server/.env`
+(local) et dans l'environnement Render (prod) : `VAPID_PUBLIC_KEY`,
+`VAPID_PRIVATE_KEY`, éventuellement `VAPID_SUBJECT` et `REMINDER_TZ`
+(par défaut `Africa/Kinshasa`). Sans ces clés, l'app fonctionne à l'identique
+mais sans rappels push. Un minuteur serveur envoie les rappels aux créneaux
+7 h–9 h et 18 h–20 h ; chaque personne choisit `1/jour` ou `2/jour` dans son profil.
 
 ## Scripts
 

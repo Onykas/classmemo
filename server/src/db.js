@@ -325,16 +325,39 @@ CREATE TABLE IF NOT EXISTS missed_days (
   PRIMARY KEY (user_id, date)
 );
 
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  endpoint TEXT UNIQUE NOT NULL,
+  p256dh TEXT NOT NULL,
+  auth TEXT NOT NULL,
+  user_agent TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS idx_courses_group ON courses(group_id, status);
 CREATE INDEX IF NOT EXISTS idx_pages_course ON course_pages(course_id);
 CREATE INDEX IF NOT EXISTS idx_flashcards_group ON flashcards(group_id);
 CREATE INDEX IF NOT EXISTS idx_messages_thread ON chat_messages(thread_id);
 CREATE INDEX IF NOT EXISTS idx_notifs_user ON notifications(user_id, read);
 CREATE INDEX IF NOT EXISTS idx_events_group ON calendar_events(group_id, date);
+CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id);
 `;
+
+// Ajouts de colonnes sur des tables déjà créées (montée de version en douceur).
+const ALTERS = [
+  `ALTER TABLE users ADD COLUMN IF NOT EXISTS reminder_last TEXT`,
+];
 
 export async function migrate() {
   await db.exec(SCHEMA);
+  for (const sql of ALTERS) {
+    try {
+      await db.exec(sql);
+    } catch (err) {
+      console.warn('[migrate] alter ignoré :', err.message);
+    }
+  }
 }
 
 export const j = (v) => (v == null ? null : JSON.stringify(v));

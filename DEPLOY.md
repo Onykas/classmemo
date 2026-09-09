@@ -39,13 +39,36 @@ gh repo create classmemo --private --source=. --remote=origin --push
 4. Il demande les valeurs `sync:false` :
    - **`DATABASE_URL`** → colle l'URL Neon de l'étape 2
    - **`ANTHROPIC_API_KEY`** → ta clé Claude si tu en as une, sinon laisse vide
+   - **`VAPID_PUBLIC_KEY`** / **`VAPID_PRIVATE_KEY`** → voir « Notifications push » ci-dessous (sinon laisse vide : les rappels push sont juste désactivés)
    - (`JWT_SECRET` est généré automatiquement)
 5. **Apply**. Premier build ≈ 3–4 min.
 6. URL finale : `https://classmemo.onrender.com` (ou proche) → **c'est le lien à partager**.
 
 > Plan gratuit Render : le serveur s'endort après 15 min sans visite et met
 > ~30–50 s à se réveiller à la visite suivante. Les données, elles, restent
-> chez Neon en permanence.
+> chez Neon en permanence. Le workflow GitHub `.github/workflows/keep-warm.yml`
+> le maintient éveillé de 6 h à 23 h (heure de Kinshasa).
+
+## Notifications push (rappels de révision)
+
+Facultatif. Sans clés VAPID, l'app marche normalement mais n'envoie pas de
+rappel sur le téléphone.
+
+1. Génère une paire de clés (une seule fois) :
+   ```bash
+   npm -w server run vapid
+   ```
+2. Dans Render → service `classmemo` → **Environment**, ajoute :
+   - `VAPID_PUBLIC_KEY` = la valeur affichée
+   - `VAPID_PRIVATE_KEY` = la valeur affichée
+   - `VAPID_SUBJECT` = `mailto:ton-email` (facultatif)
+   - `REMINDER_TZ` = `Africa/Kinshasa` (déjà la valeur par défaut)
+3. **Save Changes** → Render redéploie. Chacun active ensuite les rappels
+   dans **Profil → Réglages pédagogiques → Notifications sur cet appareil**.
+
+Créneaux d'envoi : matin (7 h–9 h) et, si « 2/jour » ou « rappel de fin de
+journée » est coché, soir (18 h–20 h). Contenu : une flashcard due, sinon une
+notion d'un cours récent. iOS exige que l'app soit ajoutée à l'écran d'accueil.
 
 ## Étape 4 — Tes amis
 
