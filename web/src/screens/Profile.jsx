@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth.jsx';
 import { useApi } from '../lib/useApi.js';
 import { put } from '../api.js';
@@ -17,7 +18,8 @@ const PRESENCE = {
 };
 
 export default function Profile() {
-  const { user, group, members, logout, updateUser } = useAuth();
+  const { user, group, groups, members, logout, updateUser, selectGroup } = useAuth();
+  const navigate = useNavigate();
   const toast = useToast();
   const subjects = useApi(group ? `/groups/${group.id}/subjects` : null, [group?.id]);
   const [keyInput, setKeyInput] = useState('');
@@ -145,6 +147,39 @@ export default function Profile() {
             <Icon name="lock" size={13} /> Espace verrouillé à 4 étudiant·es max pour préserver l'intimité d'apprentissage.
           </p>
         </Card>
+
+        {groups.length > 1 && (
+          <Card className="p-space-sm mt-space-sm flex flex-col gap-1.5">
+            <p className="text-caption font-semibold text-on-surface-variant px-1">Basculer de tablée</p>
+            {groups.map((g) => (
+              <button
+                key={g.id}
+                onClick={() => {
+                  selectGroup(g.id);
+                  toast(`Tablée active : ${g.name}`, 'success');
+                  navigate('/');
+                }}
+                className={`flex items-center justify-between px-3 h-11 rounded-xl text-label-md font-semibold transition-colors ${
+                  g.id === group?.id ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface'
+                }`}
+              >
+                <span className="truncate">{g.name}</span>
+                {g.id === group?.id ? (
+                  <Icon name="check" size={16} />
+                ) : (
+                  <span className="text-caption opacity-70">{g.code}</span>
+                )}
+              </button>
+            ))}
+          </Card>
+        )}
+
+        <button
+          onClick={() => navigate('/join?add=1')}
+          className="w-full h-11 mt-space-sm rounded-xl bg-surface-container-high text-primary flex items-center justify-center gap-2 text-label-md font-semibold"
+        >
+          <Icon name="group_add" size={18} /> Rejoindre une autre tablée
+        </button>
       </section>
 
       <section>

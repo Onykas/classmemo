@@ -39,7 +39,7 @@ export default function App() {
       <Route
         path="/join"
         element={
-          <Guard need="nogroup">
+          <Guard>
             <JoinTable />
           </Guard>
         }
