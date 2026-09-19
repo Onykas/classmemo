@@ -33,6 +33,14 @@ export default function CourseDetail() {
         </p>
       </Card>
 
+      <Btn
+        onClick={() => navigate(`/add-notes?courseId=${id}`)}
+        icon="note_add"
+        className="w-full"
+      >
+        Ajouter une séance / des notes à ce cours
+      </Btn>
+
       {course.sessions?.length > 0 && (
         <Section icon="event_note" title="Séances du cours">
           <Card className="p-space-sm flex flex-col divide-y divide-surface-container">

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth.jsx';
 import { get, post, upload } from '../api.js';
 import { recognize } from '../lib/ocr.js';
@@ -14,6 +14,8 @@ export default function AddNotes() {
   const navigate = useNavigate();
   const toast = useToast();
   const fileRef = useRef(null);
+  const [params] = useSearchParams();
+  const forcedCourseId = params.get('courseId'); // venu du bouton « Ajouter une séance » d'un cours
 
   const [subjects, setSubjects] = useState(null);
   const [subjectId, setSubjectId] = useState(null);
@@ -37,10 +39,15 @@ export default function AddNotes() {
     });
     get(`/groups/${group.id}/courses?status=all&limit=100`).then((list) => {
       setCourses(list);
-      setCourseId(list[0]?.id || null);
-      setMode(list.length ? 'existing' : 'new');
+      if (forcedCourseId && list.some((c) => c.id === forcedCourseId)) {
+        setCourseId(forcedCourseId);
+        setMode('existing');
+      } else {
+        setCourseId(list[0]?.id || null);
+        setMode(list.length ? 'existing' : 'new');
+      }
     });
-  }, [group.id]);
+  }, [group.id, forcedCourseId]);
 
   if (!subjects) return <ScreenLoader />;
   const subject = subjects.find((s) => s.id === subjectId);
@@ -160,7 +167,7 @@ export default function AddNotes() {
         </div>
       </div>
 
-      {courses.length > 0 && (
+      {courses.length > 0 && !forcedCourseId && (
         <div className="flex bg-surface-container rounded-xl p-1 text-label-md font-semibold">
           {[
             ['existing', 'Séance d’un cours'],
@@ -181,27 +188,39 @@ export default function AddNotes() {
 
       {mode === 'existing' ? (
         <>
-          <Field label="Ajouter la séance au cours">
-            <div className="flex flex-col gap-1.5">
-              {courses.map((c) => (
-                <button
-                  key={c.id}
-                  onClick={() => setCourseId(c.id)}
-                  className={`flex items-center justify-between px-3 h-12 rounded-xl text-left transition-colors ${
-                    courseId === c.id ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface'
-                  }`}
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-label-md font-semibold">{c.title}</span>
-                    <span className={`block text-caption ${courseId === c.id ? 'text-on-primary/80' : 'text-on-surface-variant'}`}>
-                      {c.teacher ? c.teacher + ' · ' : ''}{c.sessionCount || 0} séance·s
-                    </span>
-                  </span>
-                  {courseId === c.id && <Icon name="check" size={16} />}
-                </button>
-              ))}
+          {forcedCourseId ? (
+            <div className="bg-primary-fixed/50 ring-1 ring-primary/15 rounded-2xl p-space-sm flex items-center gap-2.5">
+              <span className="w-9 h-9 rounded-xl bg-surface-container-lowest text-primary flex items-center justify-center flex-shrink-0">
+                <Icon name="event_note" size={18} />
+              </span>
+              <div className="min-w-0">
+                <p className="text-caption text-on-surface-variant">Nouvelle séance pour</p>
+                <p className="text-label-md font-bold text-on-surface truncate">{existingCourse?.title || '…'}</p>
+              </div>
             </div>
-          </Field>
+          ) : (
+            <Field label="Ajouter la séance au cours">
+              <div className="flex flex-col gap-1.5">
+                {courses.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => setCourseId(c.id)}
+                    className={`flex items-center justify-between px-3 h-12 rounded-xl text-left transition-colors ${
+                      courseId === c.id ? 'bg-primary text-on-primary' : 'bg-surface-container text-on-surface'
+                    }`}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-label-md font-semibold">{c.title}</span>
+                      <span className={`block text-caption ${courseId === c.id ? 'text-on-primary/80' : 'text-on-surface-variant'}`}>
+                        {c.teacher ? c.teacher + ' · ' : ''}{c.sessionCount || 0} séance·s
+                      </span>
+                    </span>
+                    {courseId === c.id && <Icon name="check" size={16} />}
+                  </button>
+                ))}
+              </div>
+            </Field>
+          )}
           <Field label="Date de la séance">
             <input
               type="date"
