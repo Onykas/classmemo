@@ -21,6 +21,7 @@ import NotificationsScreen from './screens/Notifications.jsx';
 import Profile from './screens/Profile.jsx';
 import CumulativeSummary from './screens/CumulativeSummary.jsx';
 import CoursePrint from './screens/CoursePrint.jsx';
+import SubjectDetail from './screens/SubjectDetail.jsx';
 
 function Guard({ need = 'auth', children }) {
   const { user, group, loading } = useAuth();
@@ -62,6 +63,7 @@ export default function App() {
       >
         <Route index element={<Home />} />
         <Route path="subjects" element={<Subjects />} />
+        <Route path="subjects/:id" element={<SubjectDetail />} />
         <Route path="courses/:id" element={<CourseDetail />} />
         <Route path="courses/:id/original" element={<OriginalNotes />} />
         <Route path="courses/:id/capsule" element={<Capsule />} />

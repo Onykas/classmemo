@@ -16,6 +16,7 @@ export default function AddNotes() {
   const fileRef = useRef(null);
   const [params] = useSearchParams();
   const forcedCourseId = params.get('courseId'); // venu du bouton « Ajouter une séance » d'un cours
+  const forcedSubjectId = params.get('subjectId'); // venu du bouton « Ajouter un cours » d'une matière
 
   const [subjects, setSubjects] = useState(null);
   const [subjectId, setSubjectId] = useState(null);
@@ -35,19 +36,21 @@ export default function AddNotes() {
   useEffect(() => {
     get(`/groups/${group.id}/subjects`).then((s) => {
       setSubjects(s);
-      setSubjectId(s[0]?.id || null);
+      setSubjectId((forcedSubjectId && s.some((x) => x.id === forcedSubjectId) ? forcedSubjectId : s[0]?.id) || null);
     });
     get(`/groups/${group.id}/courses?status=all&limit=100`).then((list) => {
       setCourses(list);
       if (forcedCourseId && list.some((c) => c.id === forcedCourseId)) {
         setCourseId(forcedCourseId);
         setMode('existing');
+      } else if (forcedSubjectId) {
+        setMode('new');
       } else {
         setCourseId(list[0]?.id || null);
         setMode(list.length ? 'existing' : 'new');
       }
     });
-  }, [group.id, forcedCourseId]);
+  }, [group.id, forcedCourseId, forcedSubjectId]);
 
   if (!subjects) return <ScreenLoader />;
   const subject = subjects.find((s) => s.id === subjectId);

@@ -27,7 +27,7 @@ export default function Subjects() {
             <Card
               key={s.id}
               as="button"
-              onClick={() => (s.lastCourse ? navigate(`/courses/${s.lastCourse.id}`) : navigate('/add-notes'))}
+              onClick={() => navigate(`/subjects/${s.id}`)}
               className="p-space-md flex flex-col gap-2 text-left"
             >
               <div className="flex items-center justify-between">

@@ -5,14 +5,16 @@ import { newId, memberGuard, serializeCourse } from './_helpers.js';
 const router = Router();
 
 async function serializeSubject(s) {
+  // Compte tous les cours (pas seulement publiés) : sinon une matière avec
+  // un cours en préparation affiche « 0 cours » à tort.
   const courseCount = Number(
-    (await db.get("SELECT COUNT(*) n FROM courses WHERE subject_id = ? AND status = 'published'", s.id)).n,
+    (await db.get('SELECT COUNT(*) n FROM courses WHERE subject_id = ?', s.id)).n,
   );
   const flashcardCount = Number(
     (await db.get('SELECT COUNT(*) n FROM flashcards WHERE subject_id = ?', s.id)).n,
   );
   const lastCourse = await db.get(
-    "SELECT * FROM courses WHERE subject_id = ? AND status = 'published' ORDER BY date DESC, created_at DESC LIMIT 1",
+    'SELECT * FROM courses WHERE subject_id = ? ORDER BY date DESC, created_at DESC LIMIT 1',
     s.id,
   );
   return {
@@ -56,8 +58,10 @@ router.get('/subjects/:id', async (req, res) => {
   if (!(await db.get('SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?', s.group_id, req.user.id))) {
     return res.status(403).json({ error: 'Accès refusé' });
   }
+  // Tous les cours de la matière, quel que soit leur état (draft/analyzing/
+  // ready/published) : rien ne doit sembler avoir disparu.
   const rows = await db.all(
-    "SELECT * FROM courses WHERE subject_id = ? AND status = 'published' ORDER BY date DESC",
+    'SELECT * FROM courses WHERE subject_id = ? ORDER BY date DESC, created_at DESC',
     s.id,
   );
   const courses = await Promise.all(rows.map((c) => serializeCourse(c, { withContent: false })));
