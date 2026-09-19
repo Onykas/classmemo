@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useApi } from '../lib/useApi.js';
-import { BackBar, Btn, Card, Icon, ScreenLoader, Section, SubjectChip, subjectStyle } from '../components/ui.jsx';
+import { BackBar, Btn, Card, Icon, ScreenLoader, SubjectChip } from '../components/ui.jsx';
 import { formatDayDate, relativeTime, MONTH_NAMES } from '../lib/format.js';
 
 function dayBadge(v) {
@@ -10,182 +10,163 @@ function dayBadge(v) {
   return { day: d.getDate(), mon: MONTH_NAMES[d.getMonth()].slice(0, 3) };
 }
 
+// Titre de section « document » : grand, gras, souligné d'un trait de couleur.
+function Heading({ children }) {
+  return (
+    <h2 className="text-headline-md font-extrabold text-primary tracking-tight pb-2 mb-3 border-b-[3px] border-primary/70">
+      {children}
+    </h2>
+  );
+}
+
+// Encart couleur pour le contenu à retenir (une couleur par type de section).
+function Callout({ tone, title, children }) {
+  const tones = {
+    amber: { bg: 'bg-secondary-fixed/60', border: 'border-secondary', head: 'text-on-secondary-fixed-variant' },
+    blue: { bg: 'bg-tertiary-fixed/50', border: 'border-tertiary', head: 'text-on-tertiary-fixed-variant' },
+  };
+  const t = tones[tone];
+  return (
+    <div className={`${t.bg} rounded-xl p-space-md border-l-4 ${t.border}`}>
+      <p className={`text-label-md font-extrabold uppercase tracking-wide mb-2.5 ${t.head}`}>{title}</p>
+      {children}
+    </div>
+  );
+}
+
 export default function CourseDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { data: course, loading } = useApi(`/courses/${id}`, [id]);
 
   if (loading || !course) return <ScreenLoader />;
-  const style = subjectStyle(course.subject?.colorKey);
-  const isFresh = course.status === 'published';
+
+  const meta = [
+    course.teacher,
+    `${course.sessionCount || 1} séance${(course.sessionCount || 1) > 1 ? 's' : ''}`,
+    `${course.readingTime || 5} min de lecture`,
+    course.flashcardCount ? `${course.flashcardCount} fiches` : null,
+  ].filter(Boolean);
 
   return (
     <div className="flex flex-col gap-space-lg py-space-sm">
       <BackBar label="Tous les cours" to="/subjects" />
 
-      {/* --- En-tête du cours --- */}
-      <Card className="relative overflow-hidden p-space-md flex flex-col gap-space-sm">
-        <span className={`absolute inset-x-0 top-0 h-1.5 ${style.dot}`} />
-        <div className="flex items-center justify-between pt-1">
-          <SubjectChip colorKey={course.subject?.colorKey} label={course.subject?.name} />
-          <span
-            className={`flex items-center gap-1.5 text-caption font-semibold px-2.5 py-1 rounded-full ${
-              isFresh ? 'bg-primary-fixed/70 text-on-primary-fixed-variant' : 'bg-surface-container text-on-surface-variant'
-            }`}
+      {/* --- En-tête façon page de garde --- */}
+      <header className="flex flex-col gap-2 px-1">
+        <SubjectChip colorKey={course.subject?.colorKey} label={course.subject?.name} className="self-start" />
+        <h1 className="text-headline-lg font-extrabold text-primary leading-tight pb-2 border-b-4 border-primary inline-block self-start">
+          {course.title}
+        </h1>
+        <p className="text-body-sm text-on-surface-variant">
+          {meta.join(' · ')}
+          {(course.publishedAt || course.createdAt) && (
+            <span> · mis à jour {relativeTime(course.publishedAt || course.createdAt)}</span>
+          )}
+        </p>
+        <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-1">
+          <button
+            onClick={() => navigate(`/add-notes?courseId=${id}`)}
+            className="text-label-md font-bold text-primary underline decoration-2 underline-offset-4 decoration-primary/40 hover:decoration-primary"
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${isFresh ? 'bg-primary' : 'bg-outline'}`} />
-            {isFresh ? 'Fiche à jour' : 'En préparation'}
-          </span>
+            Ajouter une séance
+          </button>
+          <button
+            onClick={() => navigate(`/courses/${id}/print`)}
+            className="text-label-md font-bold text-primary underline decoration-2 underline-offset-4 decoration-primary/40 hover:decoration-primary"
+          >
+            Exporter en PDF
+          </button>
+          {course.pages?.length > 0 && (
+            <button
+              onClick={() => navigate(`/courses/${id}/original`)}
+              className="text-label-md font-bold text-primary underline decoration-2 underline-offset-4 decoration-primary/40 hover:decoration-primary"
+            >
+              Notes originales
+            </button>
+          )}
         </div>
+      </header>
 
-        <div>
-          <h1 className="text-headline-lg-mobile font-bold text-primary leading-tight">{course.title}</h1>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
-            {course.teacher && (
-              <p className="text-body-sm text-on-surface-variant flex items-center gap-1">
-                <Icon name="person" size={14} /> {course.teacher}
-              </p>
-            )}
-            {(course.publishedAt || course.createdAt) && (
-              <p className="text-caption text-on-surface-variant flex items-center gap-1">
-                <Icon name="update" size={13} /> Mis à jour {relativeTime(course.publishedAt || course.createdAt)}
-              </p>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 pt-1 flex-wrap">
-          <Stat icon="event_repeat" value={course.sessionCount || 1} label={course.sessionCount > 1 ? 'séances' : 'séance'} />
-          <Stat icon="schedule" value={`${course.readingTime || 5} min`} label="lecture" />
-          <Stat icon="style" value={course.flashcardCount} label="fiches" />
-          {course.quiz?.questionCount > 0 && <Stat icon="quiz" value={course.quiz.questionCount} label="quiz" />}
-        </div>
-      </Card>
-
-      {/* --- Barre d'actions --- */}
-      <div className="flex gap-2 overflow-x-auto pb-0.5">
-        <ToolChip icon="note_add" label="Ajouter une séance" primary onClick={() => navigate(`/add-notes?courseId=${id}`)} />
-        <ToolChip icon="picture_as_pdf" label="Export PDF" onClick={() => navigate(`/courses/${id}/print`)} />
-        {course.pages?.length > 0 && (
-          <ToolChip icon="photo_library" label={`${course.pages.length} page·s`} onClick={() => navigate(`/courses/${id}/original`)} />
-        )}
-      </div>
-
-      {/* --- Frise des séances --- */}
+      {/* --- Séances du cours --- */}
       {course.sessions?.length > 0 && (
-        <Section icon="event_note" title="Séances du cours">
-          <Card className="p-space-md">
-            <div className="relative flex flex-col gap-space-md">
-              {course.sessions.length > 1 && (
-                <span className="absolute left-[19px] top-3 bottom-3 w-px bg-outline-variant" aria-hidden="true" />
-              )}
-              {course.sessions.map((s) => {
-                const badge = dayBadge(s.date);
-                return (
-                  <div key={s.id} className="relative flex gap-3">
-                    <div className="relative z-10 w-10 h-10 rounded-xl bg-primary text-on-primary flex flex-col items-center justify-center flex-shrink-0 shadow-card leading-none">
-                      {badge ? (
-                        <>
-                          <span className="text-label-md font-bold">{badge.day}</span>
-                          <span className="text-[9px] uppercase opacity-80 tracking-wide">{badge.mon}</span>
-                        </>
-                      ) : (
-                        <Icon name="event" size={16} />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0 pt-1">
-                      <p className="text-label-md font-semibold text-on-surface">{s.label || (s.date ? formatDayDate(s.date) : 'Séance')}</p>
-                      {s.note && <p className="text-caption text-on-surface-variant mt-0.5 italic">« {s.note} »</p>}
-                      <p className="text-caption text-on-surface-variant mt-0.5 flex items-center gap-1">
-                        <Icon name="description" size={12} /> {s.pageCount} bloc{s.pageCount > 1 ? 's' : ''} de notes
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        </Section>
+        <section>
+          <Heading>Séances du cours</Heading>
+          <div className="flex flex-col gap-space-md border-l-2 border-primary/25 pl-space-md ml-1">
+            {course.sessions.map((s) => {
+              const badge = dayBadge(s.date);
+              return (
+                <div key={s.id} className="relative">
+                  <span className="absolute -left-[calc(1rem+5px)] top-1.5 w-2.5 h-2.5 rounded-full bg-primary" />
+                  <p className="text-label-md font-extrabold text-on-surface underline decoration-primary/30 underline-offset-4">
+                    {badge ? `${badge.day} ${badge.mon}` : ''} {s.label || (s.date ? formatDayDate(s.date) : 'Séance')}
+                  </p>
+                  {s.note && <p className="text-body-sm text-on-surface-variant italic mt-1">« {s.note} »</p>}
+                  <p className="text-caption text-on-surface-variant mt-0.5">
+                    {s.pageCount} bloc{s.pageCount > 1 ? 's' : ''} de notes
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {/* --- Résumé --- */}
-      <Section
-        icon="menu_book"
-        title="Résumé"
-        action={
-          <span className="text-caption text-on-surface-variant flex items-center gap-1">
-            <Icon name="schedule" size={13} /> {course.readingTime || 5} min
-          </span>
-        }
-      >
+      <section>
+        <Heading>Résumé</Heading>
         {course.summary ? (
-          <Card className="p-space-md">
-            {course.summary.split('\n\n').map((p, i) => (
-              <p key={i} className="text-body-md text-on-surface-variant leading-relaxed mb-2 last:mb-0">
-                {p}
-              </p>
-            ))}
-          </Card>
+          course.summary.split('\n\n').map((p, i) => (
+            <p key={i} className="text-body-lg text-on-surface leading-relaxed mb-3 last:mb-0">
+              {p}
+            </p>
+          ))
         ) : (
-          <Card className="p-space-md flex items-center gap-space-sm text-on-surface-variant">
-            <Icon name="hourglass_top" size={20} className="flex-shrink-0" />
-            <p className="text-body-sm">La synthèse sera disponible dès que l'analyse est terminée.</p>
-          </Card>
+          <p className="text-body-md text-on-surface-variant italic">
+            La synthèse sera disponible dès que l'analyse est terminée.
+          </p>
         )}
-      </Section>
+      </section>
 
       {/* --- À retenir --- */}
       {course.keyPoints?.length > 0 && (
-        <Section
-          icon="star"
-          title="À retenir"
-          action={<span className="text-caption font-bold text-secondary bg-secondary-fixed px-2 py-0.5 rounded-full">Essentiel exam</span>}
-        >
-          <Card className="p-space-md flex flex-col gap-space-sm">
+        <Callout tone="amber" title="Points essentiels à retenir">
+          <ol className="flex flex-col gap-space-sm">
             {course.keyPoints.map((k, i) => (
-              <div key={i} className="flex gap-2.5">
-                <span className="w-6 h-6 rounded-full bg-primary-fixed text-primary flex items-center justify-center flex-shrink-0 mt-0.5 text-label-sm font-bold">
-                  {i + 1}
-                </span>
-                <p className="text-body-sm text-on-surface-variant leading-relaxed">{k}</p>
-              </div>
+              <li key={i} className="flex gap-2.5">
+                <span className="font-extrabold text-secondary flex-shrink-0">{i + 1}.</span>
+                <span className="text-body-md text-on-secondary-fixed-variant leading-relaxed">{k}</span>
+              </li>
             ))}
-          </Card>
-        </Section>
+          </ol>
+        </Callout>
       )}
 
       {/* --- Comprendre simplement --- */}
       {course.analogy?.body && (
-        <Section icon="lightbulb" title="Comprendre simplement">
-          <div className="bg-secondary-fixed/60 rounded-2xl p-space-md border-l-[3px] border-secondary flex gap-space-sm">
-            <Icon name="format_quote" size={22} className="text-secondary flex-shrink-0 -scale-x-100" />
-            <div>
-              <p className="text-caption uppercase tracking-wider text-secondary font-bold mb-1">{course.analogy.title}</p>
-              <p className="text-body-md text-on-secondary-fixed-variant italic leading-relaxed">{course.analogy.body}</p>
-            </div>
-          </div>
-        </Section>
+        <Callout tone="blue" title={`Comprendre simplement — ${course.analogy.title}`}>
+          <p className="text-body-md text-on-tertiary-fixed-variant italic leading-relaxed">{course.analogy.body}</p>
+        </Callout>
       )}
 
       {/* --- Notions clés --- */}
       {course.notions?.length > 0 && (
-        <Section icon="key" title="Notions clés">
-          <div className="grid grid-cols-2 gap-space-sm">
+        <section>
+          <Heading>Notions clés</Heading>
+          <Card className="p-space-md flex flex-col divide-y divide-outline-variant/50">
             {course.notions.map((n, i) => (
-              <Card key={i} className="p-space-sm flex flex-col gap-1">
-                <span className={`w-7 h-7 rounded-lg flex items-center justify-center text-label-sm font-bold flex-shrink-0 ${style.soft}`}>
-                  {(n.term || '?')[0]?.toUpperCase()}
-                </span>
-                <p className="text-label-md text-on-surface leading-snug">{n.term}</p>
-                <p className="text-caption text-on-surface-variant leading-snug">{n.short}</p>
-              </Card>
+              <div key={i} className={`py-space-sm ${i === 0 ? 'pt-0' : ''} last:pb-0`}>
+                <p className="text-body-md font-extrabold text-primary">{n.term}</p>
+                <p className="text-body-sm text-on-surface-variant mt-0.5 leading-relaxed">{n.short}</p>
+              </div>
             ))}
-          </div>
-        </Section>
+          </Card>
+        </section>
       )}
 
       {/* --- Réviser --- */}
-      <Section icon="school" title="Réviser ce cours">
+      <section>
+        <Heading>Réviser ce cours</Heading>
         <div className="flex flex-col gap-space-sm">
           {course.quiz?.questionCount > 0 && (
             <Btn onClick={() => navigate(`/review?course=${id}&tab=quiz`)} className="w-full justify-between" iconRight="arrow_forward">
@@ -228,31 +209,7 @@ export default function CourseDetail() {
             </button>
           )}
         </div>
-      </Section>
+      </section>
     </div>
-  );
-}
-
-function Stat({ icon, value, label }) {
-  return (
-    <span className="flex items-center gap-1.5 bg-surface-container-low rounded-xl px-2.5 py-1.5">
-      <Icon name={icon} size={15} className="text-primary" />
-      <span className="text-label-md font-bold text-on-surface leading-none">{value}</span>
-      <span className="text-caption text-on-surface-variant leading-none">{label}</span>
-    </span>
-  );
-}
-
-function ToolChip({ icon, label, onClick, primary = false }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`flex-shrink-0 flex items-center gap-1.5 h-9 pl-2.5 pr-3 rounded-full text-label-md font-semibold transition-colors active:scale-[0.97] ${
-        primary ? 'bg-primary text-on-primary' : 'bg-surface-container-low text-on-surface hover:bg-surface-container'
-      }`}
-    >
-      <Icon name={icon} size={16} />
-      {label}
-    </button>
   );
 }

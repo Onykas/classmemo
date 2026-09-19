@@ -34,15 +34,24 @@ export default function CoursePrint() {
   return (
     <div className="print-doc">
       <style>{`
-        .print-doc { max-width: 720px; margin: 0 auto; padding: 24px 20px 80px; color: #1c2621; font-size: 14px; line-height: 1.6; }
-        .print-doc h1 { font-size: 24px; font-weight: 800; color: #134231; margin: 0 0 2px; }
-        .print-doc h2 { font-size: 17px; font-weight: 700; color: #134231; margin: 26px 0 8px; border-bottom: 1px solid #d8e2dc; padding-bottom: 3px; }
+        .print-doc { max-width: 720px; margin: 0 auto; padding: 24px 20px 80px; color: #1c2621; font-size: 14.5px; line-height: 1.65; }
+        .print-doc h1 { font-size: 30px; font-weight: 800; color: #134231; margin: 0 0 6px; padding-bottom: 10px; border-bottom: 4px solid #134231; }
+        .print-doc h2 { font-size: 19px; font-weight: 800; color: #134231; margin: 28px 0 10px; border-bottom: 3px solid rgba(19,66,49,.7); padding-bottom: 5px; }
         .print-doc h3 { font-size: 14px; font-weight: 700; margin: 16px 0 4px; }
-        .print-doc .muted { color: #5b6b63; font-size: 12px; }
-        .print-doc ul { margin: 4px 0 4px 18px; padding: 0; }
-        .print-doc .card { border: 1px solid #d8e2dc; border-radius: 10px; padding: 10px 12px; margin: 6px 0; }
+        .print-doc .muted { color: #5b6b63; font-size: 12.5px; }
+        .print-doc ul, .print-doc ol { margin: 4px 0 4px 20px; padding: 0; }
+        .print-doc .card { border: 1px solid #d8e2dc; border-radius: 10px; padding: 10px 12px; margin: 8px 0; }
         .print-doc .fc { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .print-doc .fc > div { border: 1px solid #d8e2dc; border-radius: 8px; padding: 8px 10px; }
+        .print-doc .callout { border-radius: 10px; padding: 14px 16px; margin: 10px 0 18px; border-left: 5px solid; }
+        .print-doc .callout.amber { background: #ffdcc3; border-color: #904d00; }
+        .print-doc .callout.blue { background: #c8e7f7; border-color: #203f4b; }
+        .print-doc .callout .label { font-size: 11.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; margin: 0 0 8px; }
+        .print-doc .callout.amber .label { color: #6e3900; }
+        .print-doc .callout.blue .label { color: #2d4b57; }
+        .print-doc .glossary > div { padding: 8px 0; border-bottom: 1px solid #e2e9dc; }
+        .print-doc .glossary > div:last-child { border-bottom: none; }
+        .print-doc .glossary b { color: #134231; font-size: 14.5px; }
         .toolbar { position: sticky; top: 0; background: #f4f7f5; border: 1px solid #d8e2dc; border-radius: 12px; padding: 12px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
         .toolbar button, .toolbar select { font: inherit; padding: 6px 12px; border-radius: 8px; border: 1px solid #cbd6d0; background: #fff; cursor: pointer; }
         .toolbar .primary { background: #134231; color: #fff; border-color: #134231; font-weight: 600; }
@@ -96,25 +105,33 @@ export default function CoursePrint() {
               <p key={i}>{p}</p>
             ))}
           {course.keyPoints?.length > 0 && (
-            <>
-              <h3>À retenir</h3>
-              <ul>
+            <div className="callout amber">
+              <p className="label">Points essentiels à retenir</p>
+              <ol>
                 {course.keyPoints.map((k, i) => (
                   <li key={i}>{k}</li>
                 ))}
-              </ul>
-            </>
+              </ol>
+            </div>
+          )}
+          {course.analogy?.body && (
+            <div className="callout blue">
+              <p className="label">Comprendre simplement — {course.analogy.title}</p>
+              <p style={{ fontStyle: 'italic', margin: 0 }}>{course.analogy.body}</p>
+            </div>
           )}
           {course.notions?.length > 0 && (
             <>
               <h3>Notions clés</h3>
-              <ul>
+              <div className="glossary">
                 {course.notions.map((n, i) => (
-                  <li key={i}>
-                    <b>{n.term}</b> — {n.short}
-                  </li>
+                  <div key={i}>
+                    <b>{n.term}</b>
+                    <br />
+                    {n.short}
+                  </div>
                 ))}
-              </ul>
+              </div>
             </>
           )}
         </>
